@@ -1,0 +1,18 @@
+__pycache__/
+*.pyc
+.DS_Store
+.venv/
+venv/
+.ipynb_checkpoints/
+*.RData
+
+# Redundant old Yale export; the repository copy is dataset_yale/raw_dataset.csv
+5v_cleandf_clean.csv
+
+Deliverable_1_EDA_Notebook.ipynb
+dataset_yale/Deliverable_1_Dataset_Exploration.docx
+dataset_yale/Deliverable_2_Cleaning_Project_Plan.docx
+dataset_yale/visualizations/
+ED_NHAMCS/
+*.csv
+*.RData
