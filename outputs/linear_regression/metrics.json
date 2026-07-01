@@ -1,0 +1,30 @@
+{
+  "model1_test": {
+    "r2": 0.074222,
+    "mae_log": 0.967774,
+    "rmse_log": 1.227673,
+    "mae_minutes": 31.47,
+    "rmse_minutes": 57.57
+  },
+  "model2_test": {
+    "r2": 0.078122,
+    "mae_log": 0.965902,
+    "rmse_log": 1.225085,
+    "mae_minutes": 31.43,
+    "rmse_minutes": 57.49
+  },
+  "model1_train": {
+    "r2": 0.079133,
+    "mae_log": 0.966316,
+    "rmse_log": 1.227072,
+    "mae_minutes": 31.66,
+    "rmse_minutes": 58.43
+  },
+  "model2_train": {
+    "r2": 0.083578,
+    "mae_log": 0.964412,
+    "rmse_log": 1.224106,
+    "mae_minutes": 31.61,
+    "rmse_minutes": 58.34
+  }
+}

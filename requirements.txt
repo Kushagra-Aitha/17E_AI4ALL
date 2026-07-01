@@ -1,3 +1,7 @@
-pandas
-numpy
-scikit-learn
+pandas>=2.0
+numpy>=1.26
+matplotlib>=3.8
+seaborn>=0.13
+tabulate>=0.9
+scikit-learn>=1.4
+statsmodels>=0.14

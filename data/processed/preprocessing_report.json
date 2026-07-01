@@ -1,0 +1,220 @@
+{
+  "year_range": "2007\u20132022",
+  "wait_time_clamp_minutes": 480,
+  "cleaning": {
+    "n_raw": 392761,
+    "n_after_dedup": 392598,
+    "duplicates_removed": 163,
+    "n_with_valid_wait_time": 332322
+  },
+  "imputation": {
+    "pulse_imputed_median": 88.0,
+    "bp_imputed_median": 131.0
+  },
+  "cleaned_dataset": {
+    "rows": 332322,
+    "cols": 25,
+    "path": "data/processed/nhamcs_cleaned_2007_2022.csv"
+  },
+  "model1_encoded": {
+    "rows": 329249,
+    "cols": 43,
+    "feature_columns": [
+      "age_years",
+      "survey_year",
+      "sex_Male",
+      "race_American Indian/Alaska Native Only",
+      "race_Asian Only",
+      "race_Black/African American Only",
+      "race_More than one race reported",
+      "race_Native Hawaiian/Oth Pac Isl Only",
+      "ethnicity_Hispanic or Latino",
+      "residence_Homeless",
+      "residence_Homeless/homeless shelter",
+      "residence_Nursing home",
+      "residence_Other",
+      "residence_Other institution",
+      "residence_Other residence",
+      "visit_month_April",
+      "visit_month_August",
+      "visit_month_December",
+      "visit_month_February",
+      "visit_month_January",
+      "visit_month_June",
+      "visit_month_March",
+      "visit_month_May",
+      "visit_month_November",
+      "visit_month_October",
+      "visit_month_September",
+      "visit_day_of_week_Friday",
+      "visit_day_of_week_Monday",
+      "visit_day_of_week_Saturday",
+      "visit_day_of_week_Sunday",
+      "visit_day_of_week_Thursday",
+      "visit_day_of_week_Tuesday",
+      "payment_type_Medicaid/CHIP",
+      "payment_type_Medicare",
+      "payment_type_No charge/Charity",
+      "payment_type_Other",
+      "payment_type_Self-pay",
+      "payment_type_Worker's compensation",
+      "arrival_mode_Ambulance",
+      "arrival_mode_Personal transportation",
+      "arrival_mode_Public service (nonambulance)"
+    ],
+    "path": "data/processed/nhamcs_model1_encoded.csv"
+  },
+  "model2_encoded": {
+    "rows": 329249,
+    "cols": 51,
+    "feature_columns": [
+      "age_years",
+      "survey_year",
+      "pulse",
+      "systolic_bp",
+      "pulse_missing",
+      "systolic_bp_missing",
+      "seen_72h_missing",
+      "sex_Male",
+      "race_American Indian/Alaska Native Only",
+      "race_Asian Only",
+      "race_Black/African American Only",
+      "race_More than one race reported",
+      "race_Native Hawaiian/Oth Pac Isl Only",
+      "ethnicity_Hispanic or Latino",
+      "residence_Homeless",
+      "residence_Homeless/homeless shelter",
+      "residence_Nursing home",
+      "residence_Other",
+      "residence_Other institution",
+      "residence_Other residence",
+      "visit_month_April",
+      "visit_month_August",
+      "visit_month_December",
+      "visit_month_February",
+      "visit_month_January",
+      "visit_month_June",
+      "visit_month_March",
+      "visit_month_May",
+      "visit_month_November",
+      "visit_month_October",
+      "visit_month_September",
+      "visit_day_of_week_Friday",
+      "visit_day_of_week_Monday",
+      "visit_day_of_week_Saturday",
+      "visit_day_of_week_Sunday",
+      "visit_day_of_week_Thursday",
+      "visit_day_of_week_Tuesday",
+      "payment_type_Medicaid/CHIP",
+      "payment_type_Medicare",
+      "payment_type_No charge/Charity",
+      "payment_type_Other",
+      "payment_type_Self-pay",
+      "payment_type_Worker's compensation",
+      "arrival_mode_Ambulance",
+      "arrival_mode_Personal transportation",
+      "arrival_mode_Public service (nonambulance)",
+      "triage_acuity_High",
+      "triage_acuity_Low",
+      "seen_72h_Yes"
+    ],
+    "path": "data/processed/nhamcs_model2_encoded.csv"
+  },
+  "wait_time_stats": {
+    "mean": 45.54,
+    "median": 23.0,
+    "std": 74.68,
+    "min": 0.0,
+    "max": 1440.0,
+    "n_over_clamp": 1640
+  },
+  "missing_summary_post_clean": {
+    "wait_time_min": {
+      "n_missing": 0,
+      "pct_missing": 0.0
+    },
+    "age_years": {
+      "n_missing": 1435,
+      "pct_missing": 0.43
+    },
+    "sex": {
+      "n_missing": 0,
+      "pct_missing": 0.0
+    },
+    "race": {
+      "n_missing": 49912,
+      "pct_missing": 15.02
+    },
+    "ethnicity": {
+      "n_missing": 0,
+      "pct_missing": 0.0
+    },
+    "triage_acuity": {
+      "n_missing": 75786,
+      "pct_missing": 22.8
+    },
+    "pulse": {
+      "n_missing": 0,
+      "pct_missing": 0.0
+    },
+    "systolic_bp": {
+      "n_missing": 0,
+      "pct_missing": 0.0
+    },
+    "payment_type": {
+      "n_missing": 24245,
+      "pct_missing": 7.3
+    },
+    "arrival_mode": {
+      "n_missing": 12112,
+      "pct_missing": 3.64
+    },
+    "residence": {
+      "n_missing": 9905,
+      "pct_missing": 2.98
+    },
+    "seen_72h": {
+      "n_missing": 37883,
+      "pct_missing": 11.4
+    }
+  },
+  "reference_categories_dropped": {
+    "triage_acuity": "Medium",
+    "sex": "Female",
+    "race": "White Only",
+    "ethnicity": "Not Hispanic or Latino",
+    "payment_type": "Private insurance",
+    "arrival_mode": "Walk-in/Other",
+    "residence": "Private residence",
+    "visit_day_of_week": "Wednesday",
+    "visit_month": "July",
+    "seen_72h": "No"
+  },
+  "triage_acuity_mapping": {
+    "immediate": "High",
+    "emergent": "High",
+    "urgent/emergent": "High",
+    "urgent": "Medium",
+    "semi-urgent": "Medium",
+    "semiurgent": "Medium",
+    "1-14 min": "Medium",
+    "less than 15 minutes": "Medium",
+    "15-60 min": "Medium",
+    "15- 60 minutes": "Medium",
+    "nonurgent": "Low",
+    "non-urgent": "Low",
+    "not urgent": "Low",
+    "not an emergency": "Low",
+    ">1 hour - 2 hours": "Low",
+    ">1 hour": "Low",
+    "no triage": "Low"
+  },
+  "modeling_notes": [
+    "Apply StandardScaler to numeric columns INSIDE your CV pipeline to prevent leakage.",
+    "Model 1 vs Model 2 coefficient comparison answers the equity research question.",
+    "pain_scale excluded (71% missing); run a separate 2011-2022 sub-analysis if needed.",
+    "length_of_visit_min excluded (post-visit outcome, not available at triage time).",
+    "admit_hospital / admit_observation excluded (outcomes, not predictors).",
+    "Zero values in pulse and systolic_bp were converted to NaN before imputation."
+  ]
+}

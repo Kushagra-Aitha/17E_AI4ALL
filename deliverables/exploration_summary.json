@@ -1,0 +1,58 @@
+{
+  "dataset": "NHAMCS Emergency Department (1992-2022)",
+  "files": 31,
+  "survey_years": "1992-2022",
+  "raw_rows_stacked": 839772,
+  "final_rows": 763514,
+  "final_cols": 21,
+  "duplicates_removed": 76258,
+  "empty_columns_removed": 0,
+  "missing_overall": {
+    "total_cells_key_columns": 15270280,
+    "total_missing": 3271412,
+    "missing_rate_pct": 21.42
+  },
+  "dependent_variable": {
+    "name": "wait_time_min",
+    "description": "Minutes from ED arrival to first provider contact",
+    "non_missing_n": 510128,
+    "non_missing_pct": 66.81,
+    "summary_range_min": 0,
+    "summary_range_max": 480,
+    "summary_n": 507949,
+    "median_minutes": 25,
+    "mean_minutes": 44.2,
+    "raw_min": 0,
+    "raw_max": 1440
+  },
+  "covariate_count": 19,
+  "covariate_groups": {
+    "demographic": 7,
+    "clinical": 10,
+    "access": 3
+  },
+  "outliers_retained": true,
+  "visualization_count": 14,
+  "visualizations": [
+    "outputs/visualizations/wait_time_distribution.png",
+    "outputs/visualizations/target_disposition_bar_chart.png",
+    "outputs/visualizations/age_by_disposition_boxplot.png",
+    "outputs/visualizations/scatter_age_vs_pulse_by_disposition.png",
+    "outputs/visualizations/correlation_matrix_selected_numeric.png",
+    "outputs/visualizations/wait_time_by_triage_bar.png",
+    "outputs/visualizations/wait_time_by_payment_bar.png",
+    "outputs/visualizations/admit_rate_by_immediacy.png",
+    "outputs/visualizations/admit_rate_by_arrivalmode.png",
+    "outputs/visualizations/admit_rate_by_insurance_status.png",
+    "outputs/visualizations/admit_rate_by_gender.png",
+    "outputs/visualizations/admit_rate_by_race.png",
+    "outputs/visualizations/admit_rate_by_ethnicity.png",
+    "outputs/visualizations/wait_time_yearly_trend.png"
+  ],
+  "reports": {
+    "submission": "deliverables/deliverable_2_report.md",
+    "technical": "deliverables/dataset_exploration.md",
+    "stats": "deliverables/exploration_stats.json"
+  },
+  "script": "scripts/dataset_exploration.py"
+}
