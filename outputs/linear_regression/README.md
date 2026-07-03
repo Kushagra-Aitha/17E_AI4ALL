@@ -18,10 +18,10 @@ This analysis trained two ordinary least squares (OLS) regression models on 329,
 | Finding | Magnitude | Interpretation |
 |---------|-----------|-----------------|
 | Black/AA wait-time disparity | +23% vs White (unchanged M1→M2) | **0% explained by clinical need** |
-| Hispanic/Latino disparity | +11.5% vs non-Hispanic (unchanged) | **0% explained by clinical need** |
-| Medicaid/CHIP disparity | +5% vs private insurance (only 2.7% explained) | Persistent access barrier |
+| Hispanic/Latino disparity | +11% vs non-Hispanic (unchanged) | **0% explained by clinical need** |
+| Medicaid/CHIP disparity | +7% vs private insurance (~0% explained) | Persistent access barrier |
 | Ambulance advantage | −46% vs walk-in | Largest single predictor; pre-screening works |
-| Immediate triage advantage | −22% vs medium urgency | "Sickest first" partially enforced |
+| Immediate triage advantage | −23% vs medium urgency | "Sickest first" partially enforced |
 | Temporal improvement | −27% per decade | ED throughput improved 1997–2022 |
 | Model fit (R²) | 7.8% | Expected; system-level factors unmeasured |
 
@@ -33,7 +33,7 @@ This analysis trained two ordinary least squares (OLS) regression models on 329,
 
 If we trained only **Model 2** (with clinical controls), we'd get:
 ```
-race_Black/African American: +0.229 (26% longer wait)
+race_Black/African American: +0.231 (26% longer wait)
 ```
 
 But we couldn't answer: **"Is this because Black patients are clinically different (sicker), or is something else going on?"**
@@ -47,9 +47,9 @@ This coefficient is **confounded** — it mixes two things:
 By training **two models**, we decompose the effect:
 
 ```
-Total disparity (Model 1):              +0.228  ← demographics only
-Residual disparity (Model 2):           +0.229  ← after clinical controls
-Explained by clinical need:             −0.001  ← ~0%
+Total disparity (Model 1):              +0.229  ← demographics only
+Residual disparity (Model 2):           +0.231  ← after clinical controls
+Explained by clinical need:             −0.002  ← ~0%
 ```
 
 **Interpretation:** Clinical need explains almost **none** of the racial wait-time gap. The gap persists even after accounting for triage, vitals, and prior visits. The disparity is **structural/systemic**, not due to patient acuity differences.
@@ -72,7 +72,7 @@ Explained by clinical need:             −0.001  ← ~0%
 |---|---|---|---|
 | Clinical need explains most | +0.20 | +0.05 | Adjustment shrinks effect 75% |
 | Clinical need explains some | +0.20 | +0.12 | Adjustment shrinks effect 40% |
-| **Your results** | **+0.228** | **+0.229** | Adjustment shrinks effect **~0%** |
+| **Your results** | **+0.229** | **+0.231** | Adjustment shrinks effect **~0%** |
 | Clinical need explains nothing | +0.20 | +0.20 | No shrinkage; pure structural disparity |
 
 **You're in the last category:** Race coefficients barely budge when clinical features are added. This **proves** clinical acuity doesn't explain why Black patients wait longer.
@@ -85,12 +85,12 @@ Explained by clinical need:             −0.001  ← ~0%
 
 ```
 Test-set performance:
-  Model 1: R² = 0.0742  MAE = 31.5 min   RMSE = 57.6 min
-  Model 2: R² = 0.0781  MAE = 31.4 min   RMSE = 57.5 min
+  Model 1: R² = 0.0744  MAE = 31.5 min   RMSE = 57.6 min
+  Model 2: R² = 0.0785  MAE = 31.4 min   RMSE = 57.5 min
 
 Train-set performance:
-  Model 1: R² = 0.0791  MAE = 31.7 min   RMSE = 58.4 min
-  Model 2: R² = 0.0836  MAE = 31.6 min   RMSE = 58.3 min
+  Model 1: R² = 0.0794  MAE = 31.7 min   RMSE = 58.4 min
+  Model 2: R² = 0.0843  MAE = 31.6 min   RMSE = 58.3 min
 ```
 
 **Interpretation:** Low R² (7–8%) is expected. ED wait times are driven partly by visit-level factors (patient acuity, demographics) but primarily by hospital-level factors (bed capacity, staffing, queue state) not measured in NHAMCS. The coefficient estimates remain unbiased and interpretable despite low predictive power.
@@ -102,8 +102,8 @@ Train-set performance:
 | Variable | Coefficient | Effect | 95% CI | p-value |
 |---|---|---|---|---|
 | **Arrival mode: Ambulance** | −0.462 | −46% | [−0.477, −0.447] | <.001 |
-| **Triage: High acuity (Immediate/Emergent)** | −0.220 | −22% | [−0.237, −0.203] | <.001 |
-| **Survey year (modern)** | −0.274 | −27% per decade | [−0.280, −0.268] | <.001 |
+| **Triage: High acuity (Immediate/Emergent)** | −0.234 | −23% | [−0.252, −0.217] | <.001 |
+| **Survey year (modern)** | −0.271 | −27% per decade | [−0.277, −0.265] | <.001 |
 | Visit day: Saturday | −0.075 | −7% | [−0.092, −0.058] | <.001 |
 | **Residence: Private (reference)** | — | baseline | — | — |
 
@@ -115,14 +115,14 @@ Train-set performance:
 
 | Variable | Coefficient | Effect | 95% CI | p-value |
 |---|---|---|---|---|
-| **Residence: Homeless** | +0.291 | +34% | [0.224, 0.358] | <.001 |
-| **Race: Black/African American** | +0.229 | +26% | [0.217, 0.241] | <.001 |
-| **Race: More than one race** | +0.227 | +25% | [0.164, 0.291] | <.001 |
-| **Payment: No charge/Charity** | +0.150 | +16% | [0.094, 0.205] | <.001 |
-| **Ethnicity: Hispanic or Latino** | +0.116 | +12% | [0.103, 0.130] | <.001 |
-| **Payment: Self-pay** | +0.105 | +11% | [0.089, 0.122] | <.001 |
-| **Race: American Indian/Alaska Native** | +0.103 | +11% | [0.044, 0.161] | <.001 |
-| **Payment: Medicaid/CHIP** | +0.049 | +5% | [0.024, 0.074] | <.001 |
+| **Residence: Homeless** | +0.281 | +32% | [0.213, 0.349] | <.001 |
+| **Race: Black/African American** | +0.231 | +26% | [0.219, 0.243] | <.001 |
+| **Race: More than one race** | +0.228 | +26% | [0.164, 0.291] | <.001 |
+| **Payment: No charge/Charity** | +0.168 | +18% | [0.113, 0.223] | <.001 |
+| **Ethnicity: Hispanic or Latino** | +0.108 | +11% | [0.094, 0.122] | <.001 |
+| **Payment: Self-pay** | +0.124 | +13% | [0.108, 0.141] | <.001 |
+| **Race: American Indian/Alaska Native** | +0.107 | +11% | [0.047, 0.167] | <.001 |
+| **Payment: Medicaid/CHIP** | +0.068 | +7% | [0.055, 0.081] | <.001 |
 
 ---
 
@@ -134,11 +134,11 @@ When clinical urgency features are added (triage acuity, vitals, prior visit fla
 
 ```
                                Model 1      Model 2      Change    Pct Explained
-race_More than one race        +0.232       +0.227       −0.005        2.0%
-race_Black/African American    +0.228       +0.229       +0.002        −0.7%
-ethnicity_Hispanic or Latino   +0.115       +0.116       +0.002        −1.3%
-payment_type_Medicaid/CHIP     +0.050       +0.049       −0.001        2.7%
-payment_type_Self-pay          +0.110       +0.105       −0.004        4.1%
+race_More than one race        +0.236       +0.228       −0.009        3.6%
+race_Black/African American    +0.229       +0.231       +0.002        −1.0%
+ethnicity_Hispanic or Latino   +0.108       +0.108       −0.001        0.5%
+payment_type_Medicaid/CHIP     +0.068       +0.068       −0.000        0.4%
+payment_type_Self-pay          +0.128       +0.124       −0.003        2.6%
 ```
 
 **Interpretation:** Clinical need explains **0–5%** of demographic disparities. The vast majority (95%+) of the racial and insurance-based wait-time gaps persist independent of triage, vital signs, or prior ED use.
@@ -170,7 +170,7 @@ See `coefficient_plot_equity.png`: the orange (Model 1) and teal (Model 2) bars 
 
 ## What Drives Longer Waits
 
-### 1. Homelessness: +34%
+### 1. Homelessness: +32%
 - **Why:** Homeless patients often lack:
   - Insurance information readily available
   - Stable medication/allergy history
@@ -178,7 +178,7 @@ See `coefficient_plot_equity.png`: the orange (Model 1) and teal (Model 2) bars 
   - Stable contact information for follow-up
 - **Implication:** Social determinants of health extend to healthcare access; system friction disproportionately affects vulnerable populations
 
-### 2. Race/Ethnicity (Black/AA: +26%, Hispanic: +12%): **Not Explained by Clinical Need**
+### 2. Race/Ethnicity (Black/AA: +26%, Hispanic: +11%): **Not Explained by Clinical Need**
 - **Why:** Multiple mechanisms likely:
   - Implicit bias in triage assignment or bed routing
   - Language barriers leading to communication delays
@@ -186,7 +186,7 @@ See `coefficient_plot_equity.png`: the orange (Model 1) and teal (Model 2) bars 
   - Differential routing to ancillary testing (imaging, labs)
 - **Implication:** This is the equity finding; structural/systemic factors, not patient acuity differences
 
-### 3. Insurance Type (Medicaid +5%, Self-pay +11%, No charge +16%)
+### 3. Insurance Type (Medicaid +7%, Self-pay +13%, No charge +18%)
 - **Why:** Insurance-related delays:
   - More verification/authorization steps for public insurance
   - Self-pay patients may experience deprioritization
@@ -238,7 +238,7 @@ See `coefficient_plot_equity.png`: the orange (Model 1) and teal (Model 2) bars 
 - Are walk-in patients from certain groups systematically routed to longer-wait queues?
 
 ### 3. **Homeless/Uninsured Patient Pathways**
-- Homeless (+34%) and self-pay (+11%) patients experience longest waits independent of acuity
+- Homeless (+32%) and self-pay (+13%) patients experience longest waits independent of acuity
 - Streamline administrative intake for these populations (pre-fill information, reduce verification steps)
 
 ### 4. **Provider Bias Training**
@@ -246,7 +246,7 @@ See `coefficient_plot_equity.png`: the orange (Model 1) and teal (Model 2) bars 
 - Consider bias training and feedback on disparity metrics to providers
 
 ### 5. **Language Access**
-- Hispanic patients experience 12% longer waits; language barriers may contribute
+- Hispanic patients experience 11% longer waits; language barriers may contribute
 - Ensure interpreter availability and accommodation
 
 ### 6. **Equity Monitoring Dashboard**

@@ -18,7 +18,7 @@
   },
   "model1_encoded": {
     "rows": 329249,
-    "cols": 43,
+    "cols": 47,
     "feature_columns": [
       "age_years",
       "survey_year",
@@ -28,6 +28,7 @@
       "race_Black/African American Only",
       "race_More than one race reported",
       "race_Native Hawaiian/Oth Pac Isl Only",
+      "race_Unknown",
       "ethnicity_Hispanic or Latino",
       "residence_Homeless",
       "residence_Homeless/homeless shelter",
@@ -35,6 +36,7 @@
       "residence_Other",
       "residence_Other institution",
       "residence_Other residence",
+      "residence_Unknown",
       "visit_month_April",
       "visit_month_August",
       "visit_month_December",
@@ -57,16 +59,18 @@
       "payment_type_No charge/Charity",
       "payment_type_Other",
       "payment_type_Self-pay",
+      "payment_type_Unknown",
       "payment_type_Worker's compensation",
       "arrival_mode_Ambulance",
       "arrival_mode_Personal transportation",
-      "arrival_mode_Public service (nonambulance)"
+      "arrival_mode_Public service (nonambulance)",
+      "arrival_mode_Unknown"
     ],
     "path": "data/processed/nhamcs_model1_encoded.csv"
   },
   "model2_encoded": {
     "rows": 329249,
-    "cols": 51,
+    "cols": 57,
     "feature_columns": [
       "age_years",
       "survey_year",
@@ -81,6 +85,7 @@
       "race_Black/African American Only",
       "race_More than one race reported",
       "race_Native Hawaiian/Oth Pac Isl Only",
+      "race_Unknown",
       "ethnicity_Hispanic or Latino",
       "residence_Homeless",
       "residence_Homeless/homeless shelter",
@@ -88,6 +93,7 @@
       "residence_Other",
       "residence_Other institution",
       "residence_Other residence",
+      "residence_Unknown",
       "visit_month_April",
       "visit_month_August",
       "visit_month_December",
@@ -110,12 +116,16 @@
       "payment_type_No charge/Charity",
       "payment_type_Other",
       "payment_type_Self-pay",
+      "payment_type_Unknown",
       "payment_type_Worker's compensation",
       "arrival_mode_Ambulance",
       "arrival_mode_Personal transportation",
       "arrival_mode_Public service (nonambulance)",
+      "arrival_mode_Unknown",
       "triage_acuity_High",
       "triage_acuity_Low",
+      "triage_acuity_Unknown",
+      "seen_72h_Unknown",
       "seen_72h_Yes"
     ],
     "path": "data/processed/nhamcs_model2_encoded.csv"

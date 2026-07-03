@@ -327,7 +327,12 @@ def engineer_features(df: pd.DataFrame) -> pd.DataFrame:
 
 def _one_hot(df: pd.DataFrame, col: str, reference: str | None = None, prefix: str | None = None) -> pd.DataFrame:
     prefix = prefix or col
-    dummies = pd.get_dummies(df[col], prefix=prefix, dtype=int)
+    # Give missing values their own "Unknown" category instead of letting them
+    # collapse into the (dropped) reference group. Without this, a NaN produces
+    # all-zero dummies — indistinguishable from the reference — so missing race,
+    # payment, triage, etc. would be silently counted as White / Private / Medium.
+    series = df[col].fillna("Unknown")
+    dummies = pd.get_dummies(series, prefix=prefix, dtype=int)
     if reference is not None:
         ref_col = f"{prefix}_{reference}"
         dummies = dummies.drop(columns=[ref_col], errors="ignore")
