@@ -1,6 +1,7 @@
 __pycache__/
 *.pyc
 .DS_Store
+.vscode/
 .venv/
 venv/
 .ipynb_checkpoints/
@@ -14,5 +15,6 @@ dataset_yale/Deliverable_1_Dataset_Exploration.docx
 dataset_yale/Deliverable_2_Cleaning_Project_Plan.docx
 dataset_yale/visualizations/
 ED_NHAMCS/
-*.csv
-*.RData
+
+yale_clean_triage.csv
+dataset_yale/raw_dataset.csv
