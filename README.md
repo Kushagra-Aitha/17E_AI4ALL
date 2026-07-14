@@ -21,6 +21,12 @@ pip install -r requirements.txt
 
 Open `yale_logistic_regression.ipynb` in VS Code or Jupyter, select the `.venv` Python kernel, and run all cells. The notebook expects `yale_clean_triage.csv` to be in the same folder.
 
+## Class Balance
+
+The Yale target variable is imbalanced. Discharge visits make up 393,846 records (70.27%), while admission visits make up 166,638 records (29.73%). Because discharge is the larger class, accuracy alone is not enough to evaluate the model.
+
+The train-test split uses stratification, so the admission/discharge ratio is preserved in both train and test sets. The Logistic Regression model also uses balanced class weights, which gives more weight to the minority admission class during training.
+
 ## Model Setup
 
 The target variable is `disposition_admit`, where `1` represents admission and `0` represents discharge. The data is split into an 80/20 stratified train-test split so that the admit/discharge ratio is preserved in both sets.
@@ -45,6 +51,21 @@ Recall is about 0.804 on train and 0.801 on test. This means the model catches a
 Precision is about 0.607 on both train and test. This means that when the model predicts admission, around 61% of those predictions are correct. The remaining predicted admissions are false positives, meaning some discharged patients are predicted as admitted.
 
 Overall, the train and test scores are very similar, so the model generalizes consistently across the split. The main pattern is high recall with moderate precision: it catches many admitted patients, but it also overpredicts admission for some discharged patients.
+
+## Full Performance Metrics
+
+| split | accuracy | precision | recall | specificity | f1 |
+|---|---:|---:|---:|---:|---:|
+| train | 0.787188 | 0.607358 | 0.803931 | 0.780105 | 0.691955 |
+| test | 0.787211 | 0.607810 | 0.801398 | 0.781208 | 0.691307 |
+
+These metrics give a fuller evaluation than accuracy alone, especially because the dataset is imbalanced toward discharge. Accuracy shows the overall share of correct admit/discharge predictions. Recall shows how well the model catches actual admitted patients. Precision shows how often predicted admissions are truly admissions. Specificity shows how well the model identifies actual discharged patients. F1-score summarizes the balance between precision and recall.
+
+The train and test values are very close across all five metrics, so the model performs consistently across the split. The main pattern is high recall with moderate precision: the model catches many admitted patients, but it also overpredicts admission for some discharged patients.
+
+## ROC Curve and AUC
+
+The notebook includes a ROC curve for the baseline Logistic Regression model using predicted admission probabilities on the test set. The baseline ROC-AUC is 0.875407, which shows strong overall separation between admitted and discharged patients.
 
 ## Model Tuning
 
