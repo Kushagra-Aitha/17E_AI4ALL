@@ -45,3 +45,16 @@ Recall is about 0.804 on train and 0.801 on test. This means the model catches a
 Precision is about 0.607 on both train and test. This means that when the model predicts admission, around 61% of those predictions are correct. The remaining predicted admissions are false positives, meaning some discharged patients are predicted as admitted.
 
 Overall, the train and test scores are very similar, so the model generalizes consistently across the split. The main pattern is high recall with moderate precision: it catches many admitted patients, but it also overpredicts admission for some discharged patients.
+
+## Model Tuning
+
+GridSearchCV was used to tune the Logistic Regression hyperparameters while keeping the same preprocessing pipeline. The search used recall as the scoring metric. The best parameters were `C=10`, `max_iter=1000`, and `solver="lbfgs"`. The best cross-validation recall was 0.803211.
+
+Tuned Logistic Regression metrics:
+
+| split | accuracy | recall | precision | specificity | f1 |
+|---|---:|---:|---:|---:|---:|
+| train | 0.787104 | 0.803856 | 0.607240 | 0.780016 | 0.691850 |
+| test | 0.787131 | 0.801338 | 0.607695 | 0.781119 | 0.691211 |
+
+Compared with the baseline model, tuning did not improve test recall, precision, or F1-score. The tuned model performed almost the same, with slightly lower test recall, precision, and F1.
