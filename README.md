@@ -9,6 +9,18 @@ This folder contains the Yale EMMLC admission-risk analysis. The model predicts 
 
 The dataset has 560,484 rows and 220 columns. There are 219 predictors plus the target column, `disposition_admit`. The target contains 393,846 discharge visits (70.27%) and 166,638 admission visits (29.73%).
 
+## Data Cleaning
+
+The cleaned file `yale_clean_triage.csv` was created from the Yale raw dataset by keeping the same 560,484 visits and reducing the dataset from 968 raw columns to 220 cleaned columns. The cleaned file contains 219 predictor columns plus the newly created target column, `disposition_admit`.
+
+The target column `disposition_admit` was created from the original `disposition` column. `Admit` was mapped to `1` and `Discharge` was mapped to `0`. The final target distribution is 166,638 admitted visits (29.73%) and 393,846 discharged visits (70.27%). After creating `disposition_admit`, the original `disposition` column was removed.
+
+The retained predictors include 4 demographic columns (`age`, `gender`, `race`, `ethnicity`), 1 insurance column (`insurance_status`), 4 arrival/time columns (`arrivalmode`, `arrivalmonth`, `arrivalday`, `arrivalhour_bin`), 1 triage urgency column (`esi`), 7 triage vital-sign columns, 2 prior-utilization columns (`n_edvisits`, `n_admissions`), and 200 existing `cc_*` chief complaint columns.
+
+Columns that could leak later-care information were removed, including diagnosis/comorbidity indicators, lab/result summary columns, imaging counts, medication columns, procedure/surgery columns, discharge information, length of stay, post-triage vitals, and summary columns ending in `_last`, `_min`, `_max`, or `_median`.
+
+No rows were removed during this cleaning step. Missing values were left in the cleaned CSV and are handled later inside the modeling pipeline through imputation.
+
 ## How to Run
 
 Install the needed packages:
