@@ -5,3 +5,4 @@ seaborn>=0.13
 tabulate>=0.9
 scikit-learn>=1.4
 statsmodels>=0.14
+joblib>=1.3
