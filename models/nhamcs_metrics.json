@@ -1,0 +1,29 @@
+{
+  "model1_test": {
+    "r2": 0.074222,
+    "mae_log": 0.967774,
+    "rmse_log": 1.227673,
+    "mae_minutes": 31.47,
+    "rmse_minutes": 57.57
+  },
+  "model2_test": {
+    "r2": 0.078122,
+    "mae_log": 0.965902,
+    "rmse_log": 1.225085,
+    "mae_minutes": 31.43,
+    "rmse_minutes": 57.49
+  },
+  "display": {
+    "model1": {
+      "r2": 0.074222,
+      "mae_minutes": 31.47,
+      "rmse_minutes": 57.57
+    },
+    "model2": {
+      "r2": 0.078122,
+      "mae_minutes": 31.43,
+      "rmse_minutes": 57.49
+    }
+  },
+  "notes": "Models predict log(wait_time_min + 1). Convert predictions with np.expm1(pred) to get minutes. Display metrics use minutes MAE/RMSE on the test set."
+}
