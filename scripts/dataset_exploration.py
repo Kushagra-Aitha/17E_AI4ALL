@@ -24,6 +24,7 @@ import seaborn as sns
 # Paths
 # ---------------------------------------------------------------------------
 ROOT = Path(__file__).resolve().parent.parent
+DATA_DIR = ROOT / "NHAMCS_Data"
 DATA_GLOB = "NHAMCS_ED_*_decoded.csv"
 VIZ_DIR = ROOT / "outputs" / "visualizations"
 DELIVERABLES_DIR = ROOT / "deliverables"
@@ -179,9 +180,9 @@ def load_year_file(path: Path) -> pd.DataFrame:
 
 
 def load_all_years() -> tuple[pd.DataFrame, list[int]]:
-    files = sorted(ROOT.glob(DATA_GLOB))
+    files = sorted(DATA_DIR.glob(DATA_GLOB))
     if not files:
-        raise FileNotFoundError(f"No files matching {DATA_GLOB} in {ROOT}")
+        raise FileNotFoundError(f"No files matching {DATA_GLOB} in {DATA_DIR}")
 
     years = [extract_year(f) for f in files]
     frames = [load_year_file(f) for f in files]
@@ -249,6 +250,16 @@ def clean_dataset(df: pd.DataFrame) -> tuple[pd.DataFrame, dict]:
     if "triage_immediacy" in df.columns:
         lower = df["triage_immediacy"].str.lower()
         df["triage_immediacy"] = lower.map(triage_map).fillna(df["triage_immediacy"])
+
+    # Harmonize arrival_mode: the binary ARREMS-era field (Yes/No = arrived by ambulance
+    # or not) and the categorical ARRIVE-era field (Ambulance/Personal transportation/etc.)
+    # both get resolved into "arrival_mode" without merging, so "Yes"/"No" and
+    # "Ambulance"/other categories would otherwise appear as unrelated groups even though
+    # "Yes" and "Ambulance" mean the same thing. Map the binary era into the categorical one.
+    if "arrival_mode" in df.columns:
+        lower_arr = df["arrival_mode"].str.lower().str.strip()
+        df.loc[lower_arr == "yes", "arrival_mode"] = "Ambulance"
+        df.loc[lower_arr == "no", "arrival_mode"] = "Walk-in/Other"
 
     # Create derived disposition category for visualization
     def disposition_category(row: pd.Series) -> str | float:
@@ -539,6 +550,36 @@ def save_wait_time_by_payment_bar(df: pd.DataFrame) -> Path:
     return out
 
 
+def save_wait_time_by_race_bar(df: pd.DataFrame) -> Path:
+    out = VIZ_DIR / "wait_time_by_race_bar.png"
+    plot_df = df.dropna(subset=["wait_time_min", "race"]).copy()
+    plot_df = plot_df[(plot_df["wait_time_min"] >= 0) & (plot_df["wait_time_min"] <= 240)]
+    means = plot_df.groupby("race", observed=True)["wait_time_min"].mean().sort_values(ascending=False)
+    fig, ax = plt.subplots(figsize=(11, 6))
+    sns.barplot(x=means.values, y=means.index, hue=means.index, palette="Reds_d", legend=False, ax=ax)
+    ax.set_title("Mean Wait Time by Race")
+    ax.set_xlabel("Mean wait time (minutes)")
+    ax.set_ylabel("Race")
+    fig.savefig(out)
+    plt.close(fig)
+    return out
+
+
+def save_wait_time_by_arrivalmode_bar(df: pd.DataFrame) -> Path:
+    out = VIZ_DIR / "wait_time_by_arrivalmode_bar.png"
+    plot_df = df.dropna(subset=["wait_time_min", "arrival_mode"]).copy()
+    plot_df = plot_df[(plot_df["wait_time_min"] >= 0) & (plot_df["wait_time_min"] <= 240)]
+    means = plot_df.groupby("arrival_mode", observed=True)["wait_time_min"].mean().sort_values(ascending=False)
+    fig, ax = plt.subplots(figsize=(11, 6))
+    sns.barplot(x=means.values, y=means.index, hue=means.index, palette="Greens_d", legend=False, ax=ax)
+    ax.set_title("Mean Wait Time by Arrival Mode")
+    ax.set_xlabel("Mean wait time (minutes)")
+    ax.set_ylabel("Arrival mode")
+    fig.savefig(out)
+    plt.close(fig)
+    return out
+
+
 def save_admit_rate_by_demographics(df: pd.DataFrame) -> Path:
     out = VIZ_DIR / "admit_rate_by_sex_bar.png"
     plot_df = df.dropna(subset=["sex", "admit_hospital"]).copy()
@@ -587,6 +628,8 @@ def generate_visualizations(df: pd.DataFrame) -> list[str]:
         save_correlation_matrix(df),
         save_wait_time_by_triage_bar(df),
         save_wait_time_by_payment_bar(df),
+        save_wait_time_by_race_bar(df),
+        save_wait_time_by_arrivalmode_bar(df),
         save_admit_rate_bar(
             df,
             "triage_immediacy",
@@ -619,28 +662,29 @@ def generate_visualizations(df: pd.DataFrame) -> list[str]:
 
 
 def schema_notes(years: list[int]) -> str:
+    pre2009 = [y for y in years if y < 2009]
+    post2009 = [y for y in years if y >= 2009]
     return f"""
 ### Schema differences across survey years
 
-NHAMCS ED questionnaires evolved substantially from 1992 to 2022. After stacking files,
-the combined dataset uses **{len(STANDARD_COLS)} standardized fields** (plus derived
-`disposition_category`). Key cross-year differences:
+The {len(years)} files available (`{years[0]}`–`{years[-1]}`) span one NHAMCS questionnaire
+transition, around 2009. After stacking files, the combined dataset uses
+**{len(STANDARD_COLS)} standardized fields** (plus derived `disposition_category`). Key
+cross-year differences within this range:
 
-| Concept | Early years (1992–2000) | Middle years (2001–2011) | Recent years (2012–2022) |
-|---|---|---|---|
-| Wait time | `WAITTIME` (1997–2000 only) | `waittime`/`WAITTIME` (2003–2011) | `WAITTIME` (provider contact, 2012+) |
-| Triage urgency | `URGENT` | `IMMED` (2001–2008) | `IMMEDR` (2009+) |
-| Race | `RACE` | `RACE` / `RACEUN` | `RACEUN` |
-| Payment | Individual payer flags; `PAYTYPE` | `PAYTYPE` | `PAYTYPER` |
-| Arrival mode | `ARRIVE` | `ARRIVE` / `ARREMS` | `ARREMS` |
-| Pain | `PAIN` (categorical) | `PAIN` | `PAINSCALE` (0–10) |
-| Vitals | Limited / absent early | `PULSE`, `BPSYS` (2001+) | Full initial vitals |
+| Concept | {pre2009[0] if pre2009 else years[0]}–{pre2009[-1] if pre2009 else years[0] - 1} | {post2009[0] if post2009 else years[0]}–{years[-1]} |
+|---|---|---|
+| Wait time | `WAITTIME` (waiting time to see physician) | `WAITTIME` (waiting time to see MD/DO/PA/NP) |
+| Triage urgency | `IMMED` | `IMMEDR` (recoded, unimputed) |
+| Arrival mode | `ARRIVE` (mode of arrival) | `ARREMS` (arrival by ambulance) |
+| Payment | `PAYTYPE` ({pre2009[0] if pre2009 else years[0]} only) / `PAYTYPER` | `PAYTYPER` (recoded, hierarchy-based) |
+| Pain | `PAIN` (categorical) | `PAINSCALE` (0–10 numeric) |
+| Race | `RACEUN` (present throughout) | `RACEUN` (present throughout) |
 
-**Wait time coverage:** `wait_time_min` is populated for survey years **1997–2000**,
-**2003–2006** (lowercase field names in source files), and **2007–2022**
-({len([y for y in years if (1997 <= y <= 2000) or (2003 <= y <= 2006) or (y >= 2007)])} of
-{len(years)} files). Years **1992–1996**, **2001–2002**, and early files without a
-`WAITTIME`/`waittime` field appear as missing for the outcome variable.
+`wait_time_min` is populated for all {len(years)} of {len(years)} files in this range — this
+is why the modeling pipeline (`scripts/preprocess.py`) restricts to {years[0]}–{years[-1]},
+avoiding the outcome-variable gaps and additional questionnaire eras present in years before
+{years[0]}.
 
 Files included: **{len(years)}** (`{years[0]}`–`{years[-1]}`).
 """
@@ -734,6 +778,14 @@ Outliers defined as values below Q1 − 1.5×IQR or above Q3 + 1.5×IQR.
 These fields support the research question: *Are Emergency Department wait times determined by medical need?*
 Triage immediacy (`triage_immediacy`), vitals, pain, and admission/disposition variables proxy medical acuity;
 demographics and access variables capture non-clinical factors.
+
+**Note — planned vs. final modeling features:** the list above is the full candidate set
+identified during EDA. `scripts/preprocess.py` narrows this for actual modeling: `admit_hospital`,
+`admit_observation`, `disposition`, `disposition_category`, and `length_of_visit_min` are dropped
+as post-visit outcomes (not known at triage time — including them would leak the outcome into the
+predictors), and `pain_scale` is dropped for 71% missingness (only collected 2011+). The two
+model-ready feature matrices this produces are documented in `MODELING.md` and
+`data/processed/preprocessing_report.json`.
 
 ## 5. Dependent Variable (Wait-Time ML Project)
 

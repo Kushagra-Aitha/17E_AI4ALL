@@ -1,27 +1,27 @@
 {
-  "dataset": "NHAMCS Emergency Department (1992-2022)",
-  "files": 31,
-  "survey_years": "1992-2022",
-  "raw_rows_stacked": 839772,
-  "final_rows": 763514,
+  "dataset": "NHAMCS Emergency Department (2007-2022)",
+  "files": 16,
+  "survey_years": "2007-2022",
+  "raw_rows_stacked": 392761,
+  "final_rows": 392598,
   "final_cols": 21,
-  "duplicates_removed": 76258,
+  "duplicates_removed": 163,
   "empty_columns_removed": 0,
   "missing_overall": {
-    "total_cells_key_columns": 15270280,
-    "total_missing": 3271412,
-    "missing_rate_pct": 21.42
+    "total_cells_key_columns": 7851960,
+    "total_missing": 962916,
+    "missing_rate_pct": 12.26
   },
   "dependent_variable": {
     "name": "wait_time_min",
     "description": "Minutes from ED arrival to first provider contact",
-    "non_missing_n": 510128,
-    "non_missing_pct": 66.81,
+    "non_missing_n": 332322,
+    "non_missing_pct": 84.65,
     "summary_range_min": 0,
     "summary_range_max": 480,
-    "summary_n": 507949,
-    "median_minutes": 25,
-    "mean_minutes": 44.2,
+    "summary_n": 330682,
+    "median_minutes": 22,
+    "mean_minutes": 42.1,
     "raw_min": 0,
     "raw_max": 1440
   },
@@ -31,8 +31,15 @@
     "clinical": 10,
     "access": 3
   },
+  "final_modeling_features": {
+    "note": "preprocess.py drops admit_hospital, admit_observation, disposition, disposition_category, length_of_visit_min (post-visit outcomes) and pain_scale (43% missing) from the covariate list above before encoding",
+    "model1_encoded_cols": 47,
+    "model1_features": 45,
+    "model2_encoded_cols": 56,
+    "model2_features": 54
+  },
   "outliers_retained": true,
-  "visualization_count": 14,
+  "visualization_count": 16,
   "visualizations": [
     "outputs/visualizations/wait_time_distribution.png",
     "outputs/visualizations/target_disposition_bar_chart.png",
@@ -41,6 +48,8 @@
     "outputs/visualizations/correlation_matrix_selected_numeric.png",
     "outputs/visualizations/wait_time_by_triage_bar.png",
     "outputs/visualizations/wait_time_by_payment_bar.png",
+    "outputs/visualizations/wait_time_by_race_bar.png",
+    "outputs/visualizations/wait_time_by_arrivalmode_bar.png",
     "outputs/visualizations/admit_rate_by_immediacy.png",
     "outputs/visualizations/admit_rate_by_arrivalmode.png",
     "outputs/visualizations/admit_rate_by_insurance_status.png",
@@ -49,6 +58,12 @@
     "outputs/visualizations/admit_rate_by_ethnicity.png",
     "outputs/visualizations/wait_time_yearly_trend.png"
   ],
+  "modeling_results": {
+    "notebook": "notebooks/linear_regression.ipynb",
+    "model1_r2": 0.074,
+    "model2_r2": 0.079,
+    "note": "Race/ethnicity/payment coefficients barely shrink from Model 1 to Model 2 (largest shift 0.009 vs total effects up to 0.23) -- clinical controls do not explain away the demographic disparities"
+  },
   "reports": {
     "submission": "deliverables/deliverable_2_report.md",
     "technical": "deliverables/dataset_exploration.md",

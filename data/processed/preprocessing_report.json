@@ -70,7 +70,7 @@
   },
   "model2_encoded": {
     "rows": 329249,
-    "cols": 57,
+    "cols": 56,
     "feature_columns": [
       "age_years",
       "survey_year",
@@ -78,7 +78,6 @@
       "systolic_bp",
       "pulse_missing",
       "systolic_bp_missing",
-      "seen_72h_missing",
       "sex_Male",
       "race_American Indian/Alaska Native Only",
       "race_Asian Only",

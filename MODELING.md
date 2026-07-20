@@ -1,7 +1,19 @@
-# Regression Implementation Guide
+# ED Wait-Time Modeling Guide
 
-This document describes how to implement the three planned models (Linear Regression,
-Lasso Regression, Random Forest) using the preprocessed CSVs produced by `scripts/preprocess.py`.
+This document describes four models built on the preprocessed CSVs produced by
+`scripts/preprocess.py`: three regression models predicting `log_wait_time` directly
+(Linear Regression, Lasso Regression, Random Forest), and one classification model
+(Multinomial Logistic Regression) predicting a derived Short/Medium/Long wait-time
+category. Each model is implemented in its own notebook under `notebooks/`.
+
+## Models at a glance
+
+| # | Model | Notebook | Why it was built |
+|---|---|---|---|
+| 1 | Linear Regression (OLS) | `notebooks/linear_regression.ipynb` | Interpretable baseline — coefficients on `log_wait_time` read as % effects, with HC3-robust inference for the core equity question |
+| 2 | Lasso Regression | `notebooks/lasso_regression.ipynb` | Automatic variable selection/screening across the many sparse one-hot dummy columns the encoding produces |
+| 3 | Random Forest | `notebooks/random_forest.ipynb` | Benchmark for non-linear relationships and interactions that OLS's linear form can't represent |
+| 4 | Multinomial Logistic Regression | `notebooks/wait_time_classification.ipynb` | Reframes the question as classification — can the same predictors flag a *Long*-wait visit directly, not just explain average minutes? |
 
 ---
 
@@ -137,6 +149,15 @@ print(ols2.summary())
 `HC3` robust standard errors correct for heteroskedasticity, which is almost certain in
 this data (longer waits tend to have higher variance).
 
+### Results (`notebooks/linear_regression.ipynb`)
+
+Model 1 R²=0.074 (MAE 31.5 min), Model 2 R²=0.078 (MAE 31.4 min) — adding clinical
+controls barely improves fit. The central finding: race, ethnicity, and payment-type
+coefficients (e.g. `race_Black/African American Only` ≈ +0.23) barely shrink from
+Model 1 to Model 2, meaning documented clinical need does not explain away these
+disparities. `arrival_mode_Ambulance` is the single largest coefficient in either
+model (≈ −0.46 to −0.49, both p<0.001).
+
 ---
 
 ## Step 4: Lasso Regression
@@ -170,6 +191,17 @@ This means a race category being zeroed out does not necessarily mean race is un
 check the full group together. Use Lasso as a screening step; interpret residual effects
 from the OLS output.
 
+### Results (`notebooks/lasso_regression.ipynb`)
+
+Both models select a small `alpha` (0.00028), so performance nearly matches unpenalized
+OLS (R² 0.074 / 0.078) — sparsity comes at no real cost in fit. Lasso zeroes out only
+5 of 45 features in Model 1 and 4 of 54 in Model 2, and every one of them is a small,
+already non-significant category (rare race/residence/payment/arrival-mode levels,
+n roughly 1,500–3,000) — Lasso independently agrees with the OLS significance testing
+about which features are weak. Every clinical variable offered to Model 2 survives
+selection, but demographic and access effects still rank above them by magnitude,
+corroborating the OLS equity finding via a second, independent method.
+
 ---
 
 ## Step 5: Random Forest (for comparison)
@@ -195,9 +227,63 @@ If Random Forest R² is substantially higher than OLS R², the relationship has 
 non-linear structure that linear regression is missing. If they are similar, the linear
 model is adequate and its coefficients are more trustworthy for interpretation.
 
+### Results (`notebooks/random_forest.ipynb`)
+
+R² is substantially higher than OLS/Lasso on both feature sets (Model 1: 0.092 vs.
+0.074; Model 2: 0.108 vs. 0.078) — real non-linear structure exists, particularly
+around `survey_year`'s non-monotonic trend (a sharp dip around 2020) and the
+High/Medium/Low triage-acuity effect the EDA flagged as non-monotonic. Impurity-based
+feature importance is biased toward continuous features (`age_years`, vitals) over
+one-hot dummies; permutation importance corrects this and shows `survey_year` and
+`arrival_mode_Ambulance` as the two most trustworthy top predictors either way.
+`race_Black/African American Only` and `ethnicity_Hispanic or Latino` retain real,
+non-impurity-inflated importance even in a model flexible enough to capture non-linear
+clinical effects — a third, independent corroboration of the equity finding.
+
 ---
 
-## Step 6: Evaluate and report
+## Step 6: Multinomial Logistic Regression (Wait-Time Classification)
+
+The three models above all predict `log_wait_time` as a continuous outcome. This model
+reframes the research question as classification: instead of asking "how many more
+minutes does this group wait," it asks "can these same predictors flag a `Long`-wait
+visit directly" — a framing that maps more directly onto an operational triage/staffing
+decision than an R² on a log-transformed target does.
+
+Implemented in `notebooks/wait_time_classification.ipynb`, using the Model 2
+(demographic + access + clinical) feature matrix:
+
+1. **Derive categories from `wait_time_min`** using fixed, clinically interpretable
+   cutoffs — Short (<15 min), Medium (15–60 min), Long (>60 min) — rather than
+   equal-width bins, since the raw variable is right-skewed and equal-width bins would
+   put almost everything in one bin. These cutoffs happen to land close to the
+   dataset's own 33rd/75th percentiles.
+2. **Check class balance**: ~39% Short, ~40% Medium, ~21% Long — moderately balanced,
+   though `Long` is a minority class worth watching once the model is fit.
+3. **Stratified 80/20 train/test split** (`stratify=y`) to preserve those class
+   proportions in both splits, given `Long`'s minority status.
+4. **Scale numeric features** the same way as the OLS/Lasso notebooks — `StandardScaler`
+   fit on the training split only.
+5. **Fit a baseline multinomial `LogisticRegression`** (`class_weight=None`).
+6. **Refit with `class_weight="balanced"`** to test whether reweighting the loss
+   recovers minority-class performance.
+
+### Results
+
+The unweighted baseline reaches 47.0% accuracy (vs. a 40% no-information rate) but
+`Long` recall is just 0.02 — it hides the minority class inside `Short`/`Medium`
+predictions almost entirely, which balanced accuracy (0.40) exposes but raw accuracy
+does not. The `class_weight="balanced"` refit trades overall accuracy for minority-class
+recall rather than improving for free: accuracy falls to 42.3% and `Medium` recall drops
+(0.62 → 0.25), but `Long` recall rises to 0.51 and balanced accuracy improves to 0.44.
+Neither model is strong in an absolute sense (`Long` precision stays 0.30–0.47 either
+way), but the balanced version is the more defensible choice for this research
+question — silently predicting almost no `Long` waits would understate exactly the
+long-wait visits the equity analysis cares about most.
+
+---
+
+## Step 7: Evaluate and report
 
 ### Metrics to report
 
@@ -216,19 +302,20 @@ literature on this outcome. The research value is in the coefficient patterns, n
 
 ### Answering the research question
 
-Report a table like this (made from the OLS outputs):
+Actual values from `notebooks/linear_regression.ipynb` (HC3-robust OLS, `***`=p<0.001):
 
 | Variable | Model 1 coef | Model 2 coef | Interpretation |
 |---|---|---|---|
-| `race_Black/African American Only` | +0.08** | +0.05* | Partial: clinical need explains ~38% of the disparity |
-| `payment_type_Medicaid/CHIP` | +0.12** | +0.09** | Persists after controlling for triage and vitals |
-| `triage_acuity_High` | — | −0.14** | Clinical: High-acuity patients seen faster |
-
-(Actual values will come from your fitted models.)
+| `race_Black/African American Only` | +0.229*** | +0.231*** | Persists: clinical controls do not explain the disparity |
+| `ethnicity_Hispanic or Latino` | +0.108*** | +0.108*** | Persists, essentially unchanged |
+| `payment_type_Medicaid/CHIP` | +0.068*** | +0.068*** | Persists after controlling for triage and vitals |
+| `payment_type_No charge/Charity` | +0.161*** | +0.168*** | Largest payment-type effect; persists |
+| `triage_acuity_High` | — | −0.234*** | Clinical: high-acuity patients seen faster |
+| `arrival_mode_Ambulance` | −0.485*** | −0.462*** | Largest coefficient in either model |
 
 ---
 
-## Step 7: Robustness checks
+## Step 8: Robustness checks
 
 1. **Run separately by era** — fit the same models on 2007–2013 and 2014–2022 (pre/post ACA)
    to test whether insurance expansion changed the equity pattern.
@@ -243,13 +330,50 @@ Report a table like this (made from the OLS outputs):
 
 ---
 
-## Suggested script layout
+## What was actually built
+
+All four models above ended up as standalone, executed notebooks (rather than the
+`scripts/train_*.py` layout originally sketched for this project) so that EDA,
+findings, and diagnostic plots stay next to the code that produced them:
 
 ```
 scripts/
 ├── dataset_exploration.py    (done)
-├── preprocess.py             (done)
-├── train_linear.py           OLS + Lasso on Model 1 and Model 2
-├── train_random_forest.py    RF on Model 2 for benchmarking
-└── evaluate_equity.py        coefficient comparison table + residual plots
+└── preprocess.py             (done)
+
+notebooks/
+├── linear_regression.ipynb          Model 1 + Model 2 OLS, HC3 inference, equity comparison
+├── lasso_regression.ipynb           Model 1 + Model 2 LassoCV, feature selection
+├── random_forest.ipynb              Model 1 + Model 2 RF, permutation importance, partial dependence
+└── wait_time_classification.ipynb   Short/Medium/Long multinomial logistic regression
 ```
+
+---
+
+## Model comparison for deployment
+
+There's no single answer — it depends on what the deployment is for:
+
+- **Operational wait-time predictor** (surfacing an expected wait to patients/staff):
+  **Random Forest (Model 2)** is the strongest choice. It has the best accuracy of
+  the three regression models (R²=0.108 vs. 0.078 for OLS/Lasso, lowest MAE) and is
+  the only one that captures structure the linear models miss — the COVID-era 2020
+  dip in `survey_year` and the non-monotonic triage-acuity effect (both confirmed via
+  the partial dependence plots and permutation importance in Step 5).
+- **Decision-support / policy-facing tool** (anything where the prediction needs to
+  be justified — to a hospital board, a regulator, or in response to a
+  disparate-impact question): **Linear Regression (OLS)** is the safer choice despite
+  its lower R². Its coefficients + HC3 confidence intervals are directly auditable in
+  a way Random Forest's permutation importances are not, which matters specifically
+  because the core finding here is a demographic/access disparity — an opaque model
+  making wait-time-relevant predictions in that context is itself a harder thing to
+  defend.
+- **`wait_time_classification.ipynb` (Short/Medium/Long) is not recommended for
+  deployment as-is**, regardless of context: even after `class_weight="balanced"`,
+  `Long`-wait recall is only 0.51 with precision in the 0.30–0.47 range — too
+  unreliable to act on directly. It's useful as an analysis lens (Step 6), not as a
+  production classifier.
+
+**Bottom line:** Random Forest for pure predictive accuracy with no explainability
+requirement; OLS if the deployment needs to explain *why* — which, given this
+project's equity research question, is the more likely real-world requirement.

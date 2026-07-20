@@ -34,6 +34,7 @@ import numpy as np
 import pandas as pd
 
 ROOT = Path(__file__).resolve().parent.parent
+DATA_DIR = ROOT / "NHAMCS_Data"
 DATA_GLOB = "NHAMCS_ED_*_decoded.csv"
 PROCESSED_DIR = ROOT / "data" / "processed"
 
@@ -182,9 +183,9 @@ def _load_year_file(path: Path) -> pd.DataFrame:
 
 
 def load_raw(year_start: int = MODEL_YEAR_START, year_end: int = MODEL_YEAR_END) -> pd.DataFrame:
-    files = sorted(ROOT.glob(DATA_GLOB))
+    files = sorted(DATA_DIR.glob(DATA_GLOB))
     if not files:
-        raise FileNotFoundError(f"No {DATA_GLOB} files found in {ROOT}")
+        raise FileNotFoundError(f"No {DATA_GLOB} files found in {DATA_DIR}")
     frames = [
         _load_year_file(f)
         for f in files
@@ -366,9 +367,13 @@ def encode_for_model(df: pd.DataFrame, include_clinical: bool) -> pd.DataFrame:
     # Start with numeric targets + controls
     out = df[keep_numeric].copy()
 
-    # Add seen_72h_missing only in Model 2
-    if include_clinical:
-        out["seen_72h_missing"] = df["seen_72h_missing"]
+    # seen_72h_missing is NOT added here (unlike pulse_missing/systolic_bp_missing).
+    # Those two exist because pulse/systolic_bp are numeric and get median-imputed,
+    # so the raw value alone can no longer signal "this was missing" — the flag is
+    # the only remaining record of that. seen_72h is categorical and never gets
+    # numeric imputation: its NaNs flow into _one_hot() below, which already gives
+    # them their own seen_72h_Unknown dummy. Adding seen_72h_missing on top would
+    # duplicate seen_72h_Unknown exactly (perfect collinearity, confirmed via VIF).
 
     # One-hot encode each categorical, dropping the reference category where defined
     temp = df[cats].copy()
