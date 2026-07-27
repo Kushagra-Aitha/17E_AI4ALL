@@ -15,6 +15,34 @@ category. Each model is implemented in its own notebook under `notebooks/`.
 | 3 | Random Forest | `notebooks/random_forest.ipynb` | Benchmark for non-linear relationships and interactions that OLS's linear form can't represent |
 | 4 | Multinomial Logistic Regression | `notebooks/wait_time_classification.ipynb` | Reframes the question as classification — can the same predictors flag a *Long*-wait visit directly, not just explain average minutes? |
 
+## Model evaluation comparison
+
+All regression metrics are on the held-out 20% test split, using Model 2 (demographic +
+access + clinical) features unless noted; Model 1 numbers are near-identical and included
+for reference. Classification metrics use the `class_weight="balanced"` refit as the
+recommended variant (see Step 6).
+
+| Model | Feature set | R² | MAE (log) | MAE (min) | Accuracy | Balanced accuracy |
+|---|---|---|---|---|---|---|
+| Linear Regression (OLS) | Model 1 | 0.074 | 0.968 | 31.5 | — | — |
+| Linear Regression (OLS) | Model 2 | 0.079 | 0.966 | 31.4 | — | — |
+| Lasso Regression | Model 1 | 0.074 | 0.968 | 31.5 | — | — |
+| Lasso Regression | Model 2 | 0.078 | 0.966 | 31.4 | — | — |
+| Random Forest | Model 1 | 0.092 | 0.960 | 31.3 | — | — |
+| Random Forest | Model 2 | 0.108 | 0.951 | 31.1 | — | — |
+| Multinomial Logistic (unweighted) | Model 2 | — | — | — | 0.470 | 0.400 |
+| Multinomial Logistic (balanced) | Model 2 | — | — | — | 0.423 | 0.437 |
+
+Takeaways:
+- **Lasso essentially ties OLS** on every metric — its value is confirming which features
+  are safe to drop (Step 4), not beating OLS on fit.
+- **Random Forest wins on every regression metric**, and the gap widens from Model 1 to
+  Model 2 (R² +0.018 vs. +0.005 for OLS/Lasso), consistent with it capturing non-linear
+  clinical effects the linear models can't.
+- **The classification reframing trades accuracy for `Long`-class recall**: balancing
+  class weights drops overall accuracy (0.470 → 0.423) but is the only way to get
+  usable `Long`-wait recall (0.02 → 0.51, per Step 6) — raw accuracy alone would hide that.
+
 ---
 
 ## Files you need
