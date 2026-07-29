@@ -6,6 +6,9 @@ venv/
 .ipynb_checkpoints/
 *.RData
 
+# Local experiments kept off the main project (not committed)
+_archive/
+
 # Redundant old Yale export; the repository copy is dataset_yale/raw_dataset.csv
 5v_cleandf_clean.csv
 

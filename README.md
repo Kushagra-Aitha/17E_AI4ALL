@@ -21,26 +21,22 @@ associated with wait time after controlling for medical acuity.
 ## Repository structure
 
 ```
-ED/
-├── NHAMCS_ED_YYYY_decoded.csv     raw annual survey files (1992–2022, 31 files)
 ├── scripts/
-│   ├── dataset_exploration.py     EDA: loads all years, computes stats, generates plots
-│   └── preprocess.py              cleaning and preprocessing pipeline (produces model-ready CSVs)
-├── data/
-│   └── processed/
-│       ├── nhamcs_cleaned_2007_2022.csv     cleaned dataset before encoding (332k rows, 25 cols)
-│       ├── nhamcs_model1_encoded.csv        Model 1 feature matrix — demographics + access
-│       ├── nhamcs_model2_encoded.csv        Model 2 feature matrix — demographics + access + clinical
-│       └── preprocessing_report.json        run metadata, imputed medians, mapping tables
+│   ├── dataset_exploration.py      EDA
+│   ├── preprocess.py               cleaning / encoding
+│   ├── train_linear.py             OLS equity models
+│   └── export_deploy_artifacts.py  Streamlit linear joblibs
+├── data/processed/                 model-ready CSVs (gitignored)
+├── notebooks/                      linear, lasso, RF, classification
 ├── outputs/
-│   └── visualizations/            14 EDA plots (histograms, bar charts, trend lines, heatmap)
-├── deliverables/
-│   ├── deliverable_2_report.md    full EDA write-up
-│   ├── dataset_exploration.md     technical exploration notes
-│   ├── exploration_stats.json     high-level dataset statistics
-│   └── exploration_summary.json   summary metadata
-└── MODELING.md                    next steps: regression implementation guide
+│   ├── visualizations/             EDA + classification plots
+│   └── linear_regression/          OLS metrics, equity tables, residual plots
+├── models/                         Streamlit deploy artifacts (.joblib, features, samples)
+├── deliverables/                   EDA reports
+└── MODELING.md                     modeling guide
 ```
+
+Local-only (gitignored): `_archive/random_forest/` — RF script, outputs, and joblibs kept in case we need them later.
 
 ---
 
@@ -150,20 +146,67 @@ associated with wait time.
 
 ---
 
-## How to reproduce
+## Results so far
 
-```bash
-# EDA (generates plots and reports)
-python3.12 scripts/dataset_exploration.py
+All models predict `log_wait_time` on ~329k visits (2007–2022). Model 1 = demographics + access;
+Model 2 = Model 1 + clinical features (triage, vitals, prior visit).
 
-# Cleaning and preprocessing (generates CSVs in data/processed/)
-python3.12 scripts/preprocess.py
-```
+### Linear regression (main model — equity / interpretation)
 
-Python 3.12 is required. Dependencies: `pandas`, `numpy`, `matplotlib`, `seaborn`, `tabulate`.
+| Model | R² (test) | MAE | RMSE |
+|---|---:|---:|---:|
+| Model 1 (demographics + access) | 0.074 | 31.5 min | 57.6 min |
+| Model 2 (+ clinical) | 0.078 | 31.4 min | 57.5 min |
+
+| Finding | Effect | After clinical controls? |
+|---|---|---|
+| Black / African American vs White | **+26%** longer wait | Essentially unchanged (~0% explained by clinical need) |
+| Hispanic / Latino vs non-Hispanic | **+11%** longer wait | Essentially unchanged |
+| Medicaid / CHIP vs private | **+7%** longer wait | Essentially unchanged |
+| Ambulance vs walk-in | **−46%** shorter wait | Strongest single predictor |
+| High triage acuity vs medium | **−23%** shorter wait | “Sickest first” partially enforced |
+
+**Research-question answer:** Demographic disparities in ED wait times **persist almost entirely** after controlling for clinical urgency. Race, ethnicity, and insurance remain associated with longer waits independent of triage and vitals.
+
+Deploy artifacts for Streamlit: `models/nhamcs_model1.joblib`, `models/nhamcs_model2.joblib` (plus feature lists, sample inputs, metrics). More detail: `outputs/linear_regression/README.md`.
+
+### Random Forest (tried as a non-linear benchmark)
+
+We also tried Random Forest (`n_estimators=200`, `max_depth=12`, `min_samples_leaf=50`) to see whether wait times have non-linear structure that OLS misses. **Not kept as the main project model** — linear is better for the equity write-up — but results are recorded here. Script/outputs/joblibs live locally in `_archive/random_forest/` (gitignored).
+
+| Model | R² (test) | MAE | RMSE |
+|---|---:|---:|---:|
+| RF Model 1 | 0.088 | 31.3 min | 57.3 min |
+| RF Model 2 | 0.098 | 31.2 min | 57.2 min |
+
+- RF beat linear by ~+2 pp R² on Model 2 → some real non-linear structure exists.
+- Overall fit still modest (~10%); hospital-level factors aren’t in NHAMCS.
+- Top predictors (permutation): `survey_year`, ambulance arrival, Black/AA race, high triage, Hispanic/Latino ethnicity — race/ethnicity still mattered after clinical features.
 
 ---
 
-## Next steps
+## How to reproduce
 
-See [MODELING.md](MODELING.md) for the regression implementation guide.
+```bash
+# EDA
+python scripts/dataset_exploration.py
+
+# Cleaning / encoding
+python scripts/preprocess.py
+
+# Linear regression (equity models)
+python scripts/train_linear.py
+
+# Streamlit linear joblibs / sample inputs / metrics
+python scripts/export_deploy_artifacts.py
+```
+
+Dependencies are in `requirements.txt` (`pandas`, `numpy`, `scikit-learn`, `statsmodels`, `matplotlib`, `seaborn`, `joblib`, …).
+
+---
+
+## Also in the repo
+
+- Notebooks: linear, lasso, random forest, wait-time classification (`notebooks/`)
+- Full modeling guide: [MODELING.md](MODELING.md)
+- EDA deliverables: `deliverables/`
