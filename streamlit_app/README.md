@@ -2,6 +2,13 @@
 
 This app combines the NHAMCS wait-time models with the Yale admission-risk model in four tabs: Home, Wait-Time Prediction, Admission Risk, and Monitoring.
 
+## Wait-Time Prediction tab
+
+Hospitals upload a visit-level CSV (template: `sample_wait_time_upload.csv`). The tab encodes rows, runs Model 1 and Model 2, shows summary metrics + a results table, and lets you download predictions.
+
+Logic lives in `wait_time_tab.py` so Admission Risk / Monitoring edits in `app.py` are less likely to conflict.
+
+
 ## Run Locally
 
 From the repository root:

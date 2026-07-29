@@ -3,12 +3,18 @@
 from __future__ import annotations
 
 import json
+import importlib
 from pathlib import Path
 
 import joblib
-import numpy as np
 import pandas as pd
 import streamlit as st
+
+import wait_time_tab
+
+# Reload so Wait-Time edits show up even without watchdog file watching.
+wait_time_tab = importlib.reload(wait_time_tab)
+render_wait_time_tab = wait_time_tab.render_wait_time_tab
 
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -37,50 +43,6 @@ def load_artifacts():
 
 def keep_tab_selected(tab_name: str) -> None:
     st.session_state["active_tab"] = tab_name
-
-
-def set_one_hot(row: dict, prefix: str, selection: str) -> None:
-    columns = [column for column in row if column.startswith(prefix)]
-    for column in columns:
-        row[column] = 0
-    selected_column = f"{prefix}{selection}"
-    if selected_column in row:
-        row[selected_column] = 1
-
-
-def make_nhamcs_row(
-    sample: dict,
-    age: int,
-    payment_type: str,
-    arrival_mode: str,
-    triage_acuity: str,
-    pulse: int,
-    systolic_bp: int,
-) -> dict:
-    row = sample.copy()
-    row["age_years"] = age
-    set_one_hot(row, "payment_type_", payment_type)
-    set_one_hot(row, "arrival_mode_", arrival_mode)
-    set_one_hot(row, "triage_acuity_", triage_acuity)
-
-    if "pulse" in row:
-        row["pulse"] = pulse
-        row["pulse_missing"] = 0
-    if "systolic_bp" in row:
-        row["systolic_bp"] = systolic_bp
-        row["systolic_bp_missing"] = 0
-    return row
-
-
-def predict_wait_minutes(bundle: dict, features: list[str], row: dict) -> float:
-    if bundle.get("target") != "log_wait_time" or bundle.get("target_transform") != "log1p":
-        raise ValueError("Unexpected NHAMCS target format; expected log1p wait time.")
-
-    frame = pd.DataFrame([row], columns=features)
-    numeric_columns = bundle["numeric_columns"]
-    frame[numeric_columns] = bundle["scaler"].transform(frame[numeric_columns])
-    log_wait = float(bundle["model"].predict(frame)[0])
-    return max(0.0, float(np.expm1(log_wait)))
 
 
 def complaint_label(column: str) -> str:
@@ -119,26 +81,6 @@ def make_yale_row(feature_info: dict, values: dict) -> pd.DataFrame:
     if selected_complaint in row:
         row[selected_complaint] = 1
     return pd.DataFrame([row], columns=features)
-
-
-def nhamcs_metrics_table(metrics: dict) -> pd.DataFrame:
-    display = metrics["display"]
-    return pd.DataFrame(
-        [
-            {
-                "Model": "Model 1",
-                "R-squared": display["model1"]["r2"],
-                "MAE (minutes)": display["model1"]["mae_minutes"],
-                "RMSE (minutes)": display["model1"]["rmse_minutes"],
-            },
-            {
-                "Model": "Model 2",
-                "R-squared": display["model2"]["r2"],
-                "MAE (minutes)": display["model2"]["mae_minutes"],
-                "RMSE (minutes)": display["model2"]["rmse_minutes"],
-            },
-        ]
-    )
 
 
 def yale_metrics_table(metrics: dict) -> pd.DataFrame:
@@ -199,77 +141,7 @@ with home_tab:
     )
 
 with wait_tab:
-    st.subheader("NHAMCS Wait-Time Prediction")
-    st.caption("Model 1 uses access factors; Model 2 also uses triage acuity and vital signs.")
-
-    with st.form("wait_time_form"):
-        col1, col2, col3 = st.columns(3)
-        age = col1.number_input("Age", min_value=0, max_value=100, value=31)
-        payment_type = col2.selectbox(
-            "Payment type",
-            [
-                "Private insurance / reference",
-                "Medicaid/CHIP",
-                "Medicare",
-                "Self-pay",
-                "No charge/Charity",
-                "Worker's compensation",
-                "Other",
-            ],
-        )
-        arrival_mode = col3.selectbox(
-            "Arrival mode",
-            [
-                "Personal transportation",
-                "Ambulance",
-                "Public service (nonambulance)",
-                "Other / reference",
-            ],
-        )
-        triage_acuity = col1.selectbox("Triage acuity", ["Moderate / reference", "High", "Low"])
-        pulse = col2.number_input("Pulse", min_value=20, max_value=250, value=90)
-        systolic_bp = col3.number_input(
-            "Systolic blood pressure", min_value=50, max_value=260, value=125
-        )
-        predict_wait = st.form_submit_button(
-            "Predict wait time",
-            type="primary",
-            on_click=keep_tab_selected,
-            args=("Wait-Time Prediction",),
-        )
-
-    if predict_wait:
-        row1 = make_nhamcs_row(
-            artifacts["nhamcs_sample1"],
-            age,
-            payment_type,
-            arrival_mode,
-            triage_acuity,
-            pulse,
-            systolic_bp,
-        )
-        row2 = make_nhamcs_row(
-            artifacts["nhamcs_sample2"],
-            age,
-            payment_type,
-            arrival_mode,
-            triage_acuity,
-            pulse,
-            systolic_bp,
-        )
-        wait1 = predict_wait_minutes(
-            artifacts["nhamcs_model1"], artifacts["nhamcs_features1"], row1
-        )
-        wait2 = predict_wait_minutes(
-            artifacts["nhamcs_model2"], artifacts["nhamcs_features2"], row2
-        )
-        metric1, metric2, metric3 = st.columns(3)
-        metric1.metric("Model 1 predicted wait", f"{wait1:.1f} min")
-        metric2.metric("Model 2 predicted wait", f"{wait2:.1f} min")
-        metric3.metric("Model 2 - Model 1", f"{wait2 - wait1:+.1f} min")
-
-    st.markdown("**Test-set metrics**")
-    st.dataframe(nhamcs_metrics_table(artifacts["nhamcs_metrics"]), hide_index=True)
+    render_wait_time_tab(artifacts, keep_tab_selected)
 
 with admission_tab:
     st.subheader("Yale Admission Risk")
