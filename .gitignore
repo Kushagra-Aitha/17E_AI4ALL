@@ -18,3 +18,12 @@ ED_NHAMCS/
 
 yale_clean_triage.csv
 dataset_yale/raw_dataset.csv
+
+# Local experiment artifacts
+compare_yale_models.py
+models/yale_admission_hgb_model.joblib
+models/yale_admission_rf_model.joblib
+models/yale_model_comparison_metrics.json
+
+# Local source archive
+Datasets_visualizations.zip

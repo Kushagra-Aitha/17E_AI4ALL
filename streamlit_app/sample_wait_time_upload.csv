@@ -1,0 +1,6 @@
+patient_id,age_years,survey_year,sex,race,ethnicity,residence,visit_month,visit_day_of_week,payment_type,arrival_mode,triage_acuity,pulse,systolic_bp,seen_72h
+P001,31,2018,Female,White Only,Not Hispanic or Latino,Private residence,July,Wednesday,Private insurance,Walk-in/Other,Medium,88,125,No
+P002,54,2019,Male,Black/African American Only,Not Hispanic or Latino,Private residence,January,Monday,Medicaid/CHIP,Ambulance,High,102,148,No
+P003,27,2020,Female,White Only,Hispanic or Latino,Private residence,September,Saturday,Self-pay,Personal transportation,Low,78,118,Yes
+P004,68,2017,Male,Asian Only,Not Hispanic or Latino,Nursing home,March,Friday,Medicare,Ambulance,High,96,152,No
+P005,22,2021,Female,White Only,Not Hispanic or Latino,Private residence,November,Sunday,Private insurance,Walk-in/Other,Medium,84,118,Missing

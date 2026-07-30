@@ -1,0 +1,9 @@
+patient_id,age_years,survey_year,sex,race,ethnicity,residence,visit_month,visit_day_of_week,payment_type,arrival_mode,triage_acuity,pulse,systolic_bp,seen_72h
+DEMO_01,31,2018,Female,White Only,Not Hispanic or Latino,Private residence,July,Wednesday,Private insurance,Walk-in/Other,Medium,88,125,No
+DEMO_02,54,2019,Male,Black/African American Only,Not Hispanic or Latino,Private residence,January,Monday,Medicaid/CHIP,Ambulance,High,102,148,No
+DEMO_03,27,2020,Female,White Only,Hispanic or Latino,Private residence,September,Saturday,Self-pay,Personal transportation,Low,78,118,Yes
+DEMO_04,68,2017,Male,Asian Only,Not Hispanic or Latino,Nursing home,March,Friday,Medicare,Ambulance,High,96,152,No
+DEMO_05,22,2021,Female,White Only,Not Hispanic or Latino,Private residence,November,Sunday,Private insurance,Walk-in/Other,Medium,84,118,Missing
+DEMO_06,45,2016,Male,Black/African American Only,Not Hispanic or Latino,Private residence,August,Tuesday,Medicaid/CHIP,Walk-in/Other,Low,90,130,No
+DEMO_07,39,2022,Female,White Only,Hispanic or Latino,Private residence,May,Thursday,No charge/Charity,Walk-in/Other,Medium,92,122,No
+DEMO_08,61,2015,Male,American Indian/Alaska Native Only,Not Hispanic or Latino,Private residence,December,Saturday,Self-pay,Ambulance,High,110,160,Yes

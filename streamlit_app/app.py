@@ -2,6 +2,10 @@
 
 from __future__ import annotations
 
+import csv
+from collections import Counter
+from io import BytesIO, StringIO
+import importlib
 import json
 from pathlib import Path
 
@@ -10,9 +14,60 @@ import numpy as np
 import pandas as pd
 import streamlit as st
 
+try:
+    from streamlit_app import wait_time_tab
+except ModuleNotFoundError:
+    import wait_time_tab
+
+wait_time_tab = importlib.reload(wait_time_tab)
+render_wait_time_tab = wait_time_tab.render_wait_time_tab
+
 
 ROOT = Path(__file__).resolve().parent.parent
 MODELS_DIR = ROOT / "models"
+ASSETS_DIR = Path(__file__).resolve().parent / "assets"
+YALE_UPLOAD_COLUMNS = [
+    "esi",
+    "age",
+    "gender",
+    "race",
+    "ethnicity",
+    "insurance_status",
+    "arrivalmode",
+    "arrivalmonth",
+    "arrivalday",
+    "arrivalhour_bin",
+    "triage_vital_hr",
+    "triage_vital_sbp",
+    "triage_vital_dbp",
+    "triage_vital_rr",
+    "triage_vital_o2",
+    "triage_vital_o2_device",
+    "triage_vital_temp",
+    "n_edvisits",
+    "n_admissions",
+    "chief_complaints",
+]
+YALE_COMPLAINT_LABELS = {
+    "cc_abdominalpain": "abdominal pain",
+    "cc_alcoholintoxication": "alcohol intoxication",
+    "cc_breathingdifficulty": "breathing difficulty",
+    "cc_cellulitis": "cellulitis",
+    "cc_chestpain": "chest pain",
+    "cc_dentalpain": "dental pain",
+    "cc_fall_65": "fall, age 65 or older",
+    "cc_fever": "fever",
+    "cc_fulltrauma": "full trauma",
+    "cc_gibleeding": "GI bleeding",
+    "cc_headache_newonsetornewsymptoms": "headache, new onset or new symptoms",
+    "cc_headinjury": "head injury",
+    "cc_laceration": "laceration",
+    "cc_motorvehiclecrash": "motor vehicle crash",
+    "cc_respiratorydistress": "respiratory distress",
+    "cc_shortnessofbreath": "shortness of breath",
+    "cc_strokealert": "stroke alert",
+    "cc_suture_stapleremoval": "suture/staple removal",
+}
 
 
 def load_json(filename: str):
@@ -83,42 +138,296 @@ def predict_wait_minutes(bundle: dict, features: list[str], row: dict) -> float:
     return max(0.0, float(np.expm1(log_wait)))
 
 
-def complaint_label(column: str) -> str:
-    return column.removeprefix("cc_").replace("_", " ").title()
+def duplicate_headers(headers: list) -> list[str]:
+    names = [str(header) for header in headers if header not in (None, "")]
+    counts = Counter(names)
+    return sorted(name for name, count in counts.items() if count > 1)
 
 
-def make_yale_row(feature_info: dict, values: dict) -> pd.DataFrame:
-    features = feature_info["features"]
-    cc_columns = feature_info["cc_columns"]
-    row = {column: (0 if column in cc_columns else pd.NA) for column in features}
+def read_yale_upload(file_name: str, content: bytes) -> pd.DataFrame:
+    if not content:
+        raise ValueError("The uploaded file is empty.")
 
-    row.update(
+    lower_name = file_name.lower()
+    if lower_name.endswith(".csv"):
+        try:
+            text = content.decode("utf-8-sig")
+        except UnicodeDecodeError as exc:
+            raise ValueError("CSV files must use UTF-8 encoding.") from exc
+        reader = csv.reader(StringIO(text))
+        try:
+            headers = next(reader)
+        except StopIteration as exc:
+            raise ValueError("The uploaded file is empty.") from exc
+        duplicates = duplicate_headers(headers)
+        if duplicates:
+            raise ValueError(f"Duplicate column names found: {', '.join(duplicates)}")
+        try:
+            return pd.read_csv(BytesIO(content))
+        except pd.errors.EmptyDataError as exc:
+            raise ValueError("The uploaded file is empty.") from exc
+
+    if lower_name.endswith(".xlsx"):
+        from openpyxl import load_workbook
+
+        try:
+            workbook = load_workbook(
+                BytesIO(content),
+                read_only=True,
+                data_only=True,
+            )
+            worksheet = workbook.active
+            header_row = next(
+                worksheet.iter_rows(min_row=1, max_row=1, values_only=True),
+                None,
+            )
+            workbook.close()
+        except Exception as exc:
+            raise ValueError("The Excel file could not be read.") from exc
+        if header_row is None:
+            raise ValueError("The uploaded file is empty.")
+        duplicates = duplicate_headers(list(header_row))
+        if duplicates:
+            raise ValueError(f"Duplicate column names found: {', '.join(duplicates)}")
+        return pd.read_excel(BytesIO(content))
+
+    raise ValueError("Upload a .csv or .xlsx file.")
+
+
+def yale_category_values(model, feature_info: dict) -> dict[str, set]:
+    categorical_pipeline = model.named_steps["preprocessor"].named_transformers_[
+        "categorical"
+    ]
+    onehot = categorical_pipeline.named_steps["onehot"]
+    return {
+        column: set(categories.tolist())
+        for column, categories in zip(
+            feature_info["categorical_columns"],
+            onehot.categories_,
+        )
+    }
+
+
+def format_spreadsheet_rows(mask: pd.Series) -> str:
+    row_numbers = (mask[mask].index + 2).tolist()
+    displayed = ", ".join(str(row) for row in row_numbers[:10])
+    return f"{displayed}..." if len(row_numbers) > 10 else displayed
+
+
+def prepare_yale_upload(
+    uploaded_data: pd.DataFrame,
+    model,
+    feature_info: dict,
+) -> pd.DataFrame:
+    if uploaded_data.columns.duplicated().any():
+        duplicates = uploaded_data.columns[uploaded_data.columns.duplicated()].tolist()
+        raise ValueError(f"Duplicate column names found: {', '.join(duplicates)}")
+
+    missing_columns = [
+        column for column in YALE_UPLOAD_COLUMNS if column not in uploaded_data.columns
+    ]
+    if missing_columns:
+        raise ValueError(f"Missing required columns: {', '.join(missing_columns)}")
+    if uploaded_data.empty:
+        raise ValueError("The uploaded file has no data rows.")
+
+    data = uploaded_data.reset_index(drop=True).copy()
+    errors = []
+    numeric_values = pd.DataFrame(index=data.index)
+
+    for column in feature_info["numeric_columns"]:
+        values = pd.to_numeric(data[column], errors="coerce")
+        invalid = values.isna() | ~np.isfinite(values)
+        if invalid.any():
+            errors.append(
+                f"{column} must contain a finite numeric value "
+                f"(rows {format_spreadsheet_rows(invalid)})"
+            )
+        numeric_values[column] = values
+
+    invalid_esi = ~numeric_values["esi"].isin([1, 2, 3, 4, 5])
+    if invalid_esi.any():
+        errors.append(
+            "esi must be one of 1, 2, 3, 4, or 5 "
+            f"(rows {format_spreadsheet_rows(invalid_esi)})"
+        )
+
+    invalid_device = ~numeric_values["triage_vital_o2_device"].isin([0, 1])
+    if invalid_device.any():
+        errors.append(
+            "triage_vital_o2_device must be 0 or 1 "
+            f"(rows {format_spreadsheet_rows(invalid_device)})"
+        )
+
+    for column in ("n_edvisits", "n_admissions"):
+        values = numeric_values[column]
+        invalid_count = (values < 0) | (values % 1 != 0)
+        if invalid_count.any():
+            errors.append(
+                f"{column} must be a non-negative whole number "
+                f"(rows {format_spreadsheet_rows(invalid_count)})"
+            )
+
+    category_values = yale_category_values(model, feature_info)
+    for column, valid_values in category_values.items():
+        invalid_category = data[column].isna() | ~data[column].isin(valid_values)
+        if invalid_category.any():
+            errors.append(
+                f"{column} contains an unknown category "
+                f"(rows {format_spreadsheet_rows(invalid_category)}). "
+                f"Allowed values: {', '.join(sorted(str(value) for value in valid_values))}"
+            )
+
+    valid_complaints = set(feature_info["cc_columns"])
+    parsed_complaints = []
+    for index, value in data["chief_complaints"].items():
+        if pd.isna(value) or not str(value).strip():
+            errors.append(f"chief_complaints is empty (row {index + 2})")
+            parsed_complaints.append([])
+            continue
+        complaints = [item.strip() for item in str(value).split(";") if item.strip()]
+        unknown = sorted(set(complaints) - valid_complaints)
+        if unknown:
+            errors.append(
+                f"chief_complaints contains unknown code(s) at row {index + 2}: "
+                f"{', '.join(unknown)}"
+            )
+        parsed_complaints.append(complaints)
+
+    if errors:
+        raise ValueError("\n".join(errors))
+
+    model_input = pd.DataFrame(
+        0,
+        index=data.index,
+        columns=feature_info["features"],
+    )
+    for column in feature_info["numeric_columns"]:
+        model_input[column] = numeric_values[column]
+    for column in feature_info["categorical_columns"]:
+        model_input[column] = data[column]
+    for index, complaints in enumerate(parsed_complaints):
+        for complaint in complaints:
+            model_input.at[index, complaint] = 1
+    return model_input[feature_info["features"]]
+
+
+def predict_yale_upload(
+    uploaded_data: pd.DataFrame,
+    model,
+    feature_info: dict,
+) -> pd.DataFrame:
+    model_input = prepare_yale_upload(uploaded_data, model, feature_info)
+    probabilities = model.predict_proba(model_input)[:, 1]
+    predictions = model.predict(model_input).astype(int)
+
+    results = uploaded_data.reset_index(drop=True).copy()
+    results["admission_probability"] = probabilities
+    results["predicted_disposition"] = np.where(predictions == 1, "Admit", "Discharge")
+    return results
+
+
+def yale_sample_upload() -> pd.DataFrame:
+    rows = [
+        [2, 67, "Male", "White or Caucasian", "Non-Hispanic", "Medicare", "ambulance", "July", "Tuesday", "19-22", 112, 158, 92, 22, 94, 0, 98.7, 2, 1, "cc_chestpain"],
+        [1, 74, "Female", "Black or African American", "Non-Hispanic", "Medicaid", "ambulance", "January", "Sunday", "23-02", 128, 92, 58, 32, 86, 1, 103.1, 3, 1, "cc_respiratorydistress;cc_fever"],
+        [2, 58, "Male", "Asian", "Non-Hispanic", "Commercial", "Car", "October", "Friday", "07-10", 118, 101, 64, 24, 95, 0, 98.4, 1, 0, "cc_gibleeding"],
+        [1, 81, "Female", "White or Caucasian", "Non-Hispanic", "Medicare", "ambulance", "March", "Monday", "11-14", 88, 190, 105, 20, 93, 0, 99.0, 4, 2, "cc_strokealert"],
+        [3, 49, "Male", "Black or African American", "Hispanic or Latino", "Medicaid", "Walk-in", "August", "Wednesday", "15-18", 102, 132, 78, 18, 97, 0, 100.8, 2, 0, "cc_cellulitis"],
+        [4, 29, "Female", "Asian", "Non-Hispanic", "Commercial", "Car", "May", "Saturday", "19-22", 84, 124, 76, 16, 99, 0, 98.2, 0, 0, "cc_laceration"],
+        [5, 35, "Male", "Other", "Hispanic or Latino", "Self pay", "Public Transportation", "June", "Thursday", "07-10", 78, 126, 82, 16, 99, 0, 98.5, 1, 0, "cc_dentalpain"],
+        [4, 44, "Male", "White or Caucasian", "Non-Hispanic", "Medicaid", "Police", "December", "Saturday", "23-02", 96, 138, 86, 18, 97, 0, 97.9, 5, 0, "cc_alcoholintoxication"],
+        [3, 53, "Female", "American Indian or Alaska Native", "Non-Hispanic", "Commercial", "Car", "September", "Monday", "03-06", 108, 116, 72, 20, 96, 0, 99.6, 1, 0, "cc_abdominalpain"],
+        [5, 41, "Female", "Native Hawaiian or Other Pacific Islander", "Non-Hispanic", "Commercial", "Walk-in", "February", "Wednesday", "11-14", 72, 120, 74, 14, 99, 0, 98.1, 0, 0, "cc_suture_stapleremoval"],
+    ]
+    return pd.DataFrame(rows, columns=YALE_UPLOAD_COLUMNS)
+
+
+def yale_prediction_summary(results: pd.DataFrame) -> dict:
+    disposition_counts = results["predicted_disposition"].value_counts()
+    return {
+        "total": len(results),
+        "admit": int(disposition_counts.get("Admit", 0)),
+        "discharge": int(disposition_counts.get("Discharge", 0)),
+        "highest_probability": float(results["admission_probability"].max()),
+        "lowest_probability": float(results["admission_probability"].min()),
+    }
+
+
+def readable_complaint(code: str) -> str:
+    if code in YALE_COMPLAINT_LABELS:
+        return YALE_COMPLAINT_LABELS[code]
+    return code.removeprefix("cc_").replace("_", " ")
+
+
+def readable_complaints(value: str) -> str:
+    codes = [code.strip() for code in str(value).split(";") if code.strip()]
+    return " + ".join(readable_complaint(code) for code in codes)
+
+
+def display_number(value) -> str:
+    numeric_value = float(value)
+    return str(int(numeric_value)) if numeric_value.is_integer() else f"{numeric_value:g}"
+
+
+def admission_risk_level(probability: float) -> str:
+    if probability >= 0.7:
+        return "High"
+    if probability >= 0.3:
+        return "Moderate"
+    return "Low"
+
+
+def yale_patient_label(row: pd.Series, row_number: int) -> str:
+    if "patient_name" in row.index and pd.notna(row["patient_name"]):
+        patient_name = str(row["patient_name"]).strip()
+        if patient_name:
+            return patient_name
+    return f"Row {row_number}"
+
+
+def yale_visit_summary(row: pd.Series) -> str:
+    return (
+        f"{display_number(row['age'])}-year-old, "
+        f"ESI {display_number(row['esi'])}, "
+        f"{readable_complaints(row['chief_complaints'])}"
+    )
+
+
+def yale_results_table(results: pd.DataFrame) -> pd.DataFrame:
+    rows = results.reset_index(drop=True)
+    return pd.DataFrame(
         {
-            "age": values["age"],
-            "esi": values["esi"],
-            "triage_vital_hr": values["heart_rate"],
-            "triage_vital_sbp": values["systolic_bp"],
-            "triage_vital_o2": values["oxygen_saturation"],
-            "gender": "Female",
-            "race": "White or Caucasian",
-            "ethnicity": "Non-Hispanic",
-            "insurance_status": "Commercial",
-            "arrivalmode": "Car",
-            "arrivalmonth": "January",
-            "arrivalday": "Monday",
-            "arrivalhour_bin": "11-14",
-            "triage_vital_dbp": 80,
-            "triage_vital_rr": 18,
-            "triage_vital_o2_device": 0,
-            "triage_vital_temp": 98.6,
-            "n_edvisits": 0,
-            "n_admissions": 0,
+            "Patient": [
+                yale_patient_label(row, index + 1)
+                for index, row in rows.iterrows()
+            ],
+            "Chance of Admission": rows["admission_probability"].map(
+                lambda probability: f"{probability:.1%}"
+            ),
+            "Likely Outcome": rows["predicted_disposition"],
+            "Summary": [yale_visit_summary(row) for _, row in rows.iterrows()],
         }
     )
-    selected_complaint = values["chief_complaint"]
-    if selected_complaint in row:
-        row[selected_complaint] = 1
-    return pd.DataFrame([row], columns=features)
+
+
+def yale_risk_counts(results: pd.DataFrame) -> dict[str, int]:
+    levels = results["admission_probability"].map(admission_risk_level)
+    return {
+        level: int((levels == level).sum())
+        for level in ("High", "Moderate", "Low")
+    }
+
+
+def show_yale_visit_card(row: pd.Series, row_number: int) -> None:
+    patient = yale_patient_label(row, row_number)
+    probability = float(row["admission_probability"])
+    prediction = row["predicted_disposition"]
+    with st.container(border=True):
+        st.markdown(f"#### {patient}")
+        st.metric("Chance of Admission", f"{probability:.1%}")
+        st.write(f"**Likely Outcome:** {prediction}")
+        st.write(yale_visit_summary(row))
 
 
 def nhamcs_metrics_table(metrics: dict) -> pd.DataFrame:
@@ -157,7 +466,40 @@ def yale_metrics_table(metrics: dict) -> pd.DataFrame:
 
 
 st.set_page_config(page_title="ED Model Explorer", page_icon="+", layout="wide")
-st.title("Drivers of Emergency Department Wait Times")
+st.markdown(
+    """
+    <style>
+    .stApp p, .stApp li, .stApp label {
+        font-size: 1.04rem;
+        line-height: 1.55;
+    }
+    [data-testid="stCaptionContainer"] p {
+        color: #4b5563;
+        font-size: 0.96rem;
+        line-height: 1.45;
+    }
+    [data-testid="stMetricLabel"] p {
+        font-size: 0.98rem;
+        font-weight: 600;
+    }
+    [data-testid="stMetricValue"] {
+        font-size: 2rem;
+    }
+    [data-testid="stDataFrame"] {
+        font-size: 1rem;
+    }
+    .stTabs [data-baseweb="tab"] p {
+        font-size: 1.02rem;
+        font-weight: 600;
+    }
+    [data-testid="stFileUploader"] small {
+        font-size: 0.9rem;
+    }
+    </style>
+    """,
+    unsafe_allow_html=True,
+)
+st.title("Emergency Department Wait-Time and Admission Support")
 
 try:
     artifacts = load_artifacts()
@@ -172,160 +514,323 @@ home_tab, wait_tab, admission_tab, monitoring_tab = st.tabs(
 )
 
 with home_tab:
-    st.subheader("Project Overview")
     st.write(
-        "To what extent are emergency department wait times and hospital admission risk "
-        "explained by patient symptoms, clinical urgency, and triage-time factors, and do "
-        "demographic factors remain associated after accounting for medical need?"
+        "This app explores two emergency department outcomes: how long a patient may wait "
+        "before first provider contact and the chance that a patient may be admitted after "
+        "triage. Each workflow uses a separate dataset and model."
     )
+
     left, right = st.columns(2)
     with left:
-        st.markdown("**NHAMCS wait-time analysis**")
-        st.write(
-            "National emergency department survey records are used for two Linear Regression "
-            "models. Model 1 uses demographics and access factors; Model 2 adds clinical "
-            "urgency and vital signs."
-        )
+        with st.container(border=True):
+            st.markdown("### Wait-Time Prediction")
+            st.write(
+                "Uses NHAMCS emergency department data to estimate approximate minutes before "
+                "first provider contact. The model considers demographics, access factors, "
+                "arrival mode, triage priority, and selected vital signs."
+            )
     with right:
-        st.markdown("**Yale admission-risk analysis**")
-        st.write(
-            "Yale emergency department visits are used for Logistic Regression with 219 "
-            "arrival and triage-time predictors. Admission is an outcome, not a pure measure "
-            "of clinical severity."
-        )
-    st.warning(
-        "Research demonstration only. Predictions are not medical advice and must not be used "
-        "for clinical decisions."
+        with st.container(border=True):
+            st.markdown("### Admission Chance Screening")
+            st.write(
+                "Uses Yale ED triage data to estimate each visit's chance of admission. The "
+                "upload workflow uses age, ESI, vitals, arrival details, insurance, prior "
+                "utilization, and chief complaint codes."
+            )
+
+    fact_columns = st.columns(3)
+    fact_columns[0].metric("NHAMCS visits", "329,249", "2007-2022")
+    fact_columns[1].metric("Yale triage visits", "560,484")
+    fact_columns[2].metric("Yale predictors", "219")
+
+    st.write(
+        "The app uses saved model artifacts trained on large emergency department datasets. "
+        "Uploaded Yale files are checked for required columns, valid categories, numeric "
+        "values, and recognized chief complaint codes before predictions are generated."
     )
 
+    st.warning(
+        "These outputs are for analysis, education, and review support, not clinical "
+        "decisions. Wait-time estimates are approximate because staffing, bed availability, "
+        "queue length, and crowding are not included. Admission estimates would require "
+        "calibration, fairness checks, governance review, and external validation before "
+        "real-world use."
+    )
+
+    with st.expander("View Technical Results and Visualizations", expanded=False):
+        st.markdown("#### Wait-Time Model Details")
+        st.write(
+            "Two Linear Regression models were trained on 329,249 NHAMCS visits from "
+            "2007-2022. Model 1 uses 41 demographic and access features. Model 2 uses 49 "
+            "features by adding triage priority, selected vital signs, and recent ED use. "
+            "The models predict `log(wait_time_min + 1)`, which the app converts back to "
+            "minutes."
+        )
+        st.dataframe(
+            nhamcs_metrics_table(artifacts["nhamcs_metrics"]),
+            hide_index=True,
+            width="stretch",
+        )
+
+        coefficient_plot = ASSETS_DIR / "nhamcs_equity_coefficients.png"
+        residual_plot = ASSETS_DIR / "nhamcs_model2_residuals.png"
+        plot_columns = st.columns(2, gap="medium")
+        if coefficient_plot.exists():
+            with plot_columns[0]:
+                st.image(
+                    coefficient_plot,
+                    caption=(
+                        "Selected demographic and access coefficients before and after adding "
+                        "clinical controls. Coefficients show associations, not causal effects."
+                    ),
+                    width="stretch",
+                )
+        if residual_plot.exists():
+            with plot_columns[1]:
+                st.image(
+                    residual_plot,
+                    caption=(
+                        "Model 2 residual diagnostics. The remaining spread reinforces that "
+                        "wait time depends on factors outside the available patient variables."
+                    ),
+                    width="stretch",
+                )
+
+        st.info(
+            "Wait-time prediction is approximate and is most useful for understanding "
+            "patterns, limitations, and disparities rather than exact forecasting."
+        )
+
+        st.divider()
+        st.markdown("#### Admission Model Details")
+        st.write(
+            "The Yale model is balanced Logistic Regression trained on 560,484 ED triage "
+            "visits. It uses 219 original predictors, expanded into 262 coefficient terms "
+            "after preprocessing. Inputs cover demographics, insurance, arrival details, "
+            "ESI, vital signs, prior utilization, and chief complaint indicators."
+        )
+        st.dataframe(
+            yale_metrics_table(artifacts["yale_metrics"]),
+            hide_index=True,
+            width="stretch",
+        )
+        yale_test = artifacts["yale_metrics"]["test"]
+        confusion_matrix = pd.DataFrame(
+            yale_test["confusion_matrix"],
+            index=["Actual discharge", "Actual admit"],
+            columns=["Predicted discharge", "Predicted admit"],
+        )
+        st.markdown("**Yale test confusion matrix**")
+        st.dataframe(confusion_matrix, width="stretch")
+
+        yale_roc_plot = ASSETS_DIR / "yale_roc_curve.png"
+        yale_esi_plot = ASSETS_DIR / "yale_admit_rate_by_esi.png"
+        yale_plot_columns = st.columns(2, gap="medium")
+        if yale_roc_plot.exists():
+            with yale_plot_columns[0]:
+                st.image(
+                    yale_roc_plot,
+                    caption=(
+                        "Test ROC curve for the Yale admission model. ROC-AUC summarizes "
+                        "overall separation between admitted and discharged visits."
+                    ),
+                    width="stretch",
+                )
+        if yale_esi_plot.exists():
+            with yale_plot_columns[1]:
+                st.image(
+                    yale_esi_plot,
+                    caption=(
+                        "Observed admission rate by ESI level in the cleaned Yale dataset. "
+                        "This is descriptive evidence, not a causal relationship."
+                    ),
+                    width="stretch",
+                )
+
+        st.info(
+            "The Yale model separates admitted and discharged visits well overall, but real "
+            "use would require calibration, subgroup fairness checks, governance review, "
+            "and external validation."
+        )
+
+        st.markdown("**Supporting artifacts**")
+        st.caption(
+            "NHAMCS evaluation: `models/nhamcs_metrics.json` and the saved Model 1/Model 2 "
+            "bundles. Yale evaluation: `models/yale_metrics.json`, feature definitions in "
+            "`models/yale_features.json`, and the baseline Logistic Regression artifact."
+        )
+
 with wait_tab:
-    st.subheader("NHAMCS Wait-Time Prediction")
-    st.caption("Model 1 uses access factors; Model 2 also uses triage acuity and vital signs.")
-
-    with st.form("wait_time_form"):
-        col1, col2, col3 = st.columns(3)
-        age = col1.number_input("Age", min_value=0, max_value=100, value=31)
-        payment_type = col2.selectbox(
-            "Payment type",
-            [
-                "Private insurance / reference",
-                "Medicaid/CHIP",
-                "Medicare",
-                "Self-pay",
-                "No charge/Charity",
-                "Worker's compensation",
-                "Other",
-            ],
-        )
-        arrival_mode = col3.selectbox(
-            "Arrival mode",
-            [
-                "Personal transportation",
-                "Ambulance",
-                "Public service (nonambulance)",
-                "Other / reference",
-            ],
-        )
-        triage_acuity = col1.selectbox("Triage acuity", ["Moderate / reference", "High", "Low"])
-        pulse = col2.number_input("Pulse", min_value=20, max_value=250, value=90)
-        systolic_bp = col3.number_input(
-            "Systolic blood pressure", min_value=50, max_value=260, value=125
-        )
-        predict_wait = st.form_submit_button(
-            "Predict wait time",
-            type="primary",
-            on_click=keep_tab_selected,
-            args=("Wait-Time Prediction",),
-        )
-
-    if predict_wait:
-        row1 = make_nhamcs_row(
-            artifacts["nhamcs_sample1"],
-            age,
-            payment_type,
-            arrival_mode,
-            triage_acuity,
-            pulse,
-            systolic_bp,
-        )
-        row2 = make_nhamcs_row(
-            artifacts["nhamcs_sample2"],
-            age,
-            payment_type,
-            arrival_mode,
-            triage_acuity,
-            pulse,
-            systolic_bp,
-        )
-        wait1 = predict_wait_minutes(
-            artifacts["nhamcs_model1"], artifacts["nhamcs_features1"], row1
-        )
-        wait2 = predict_wait_minutes(
-            artifacts["nhamcs_model2"], artifacts["nhamcs_features2"], row2
-        )
-        metric1, metric2, metric3 = st.columns(3)
-        metric1.metric("Model 1 predicted wait", f"{wait1:.1f} min")
-        metric2.metric("Model 2 predicted wait", f"{wait2:.1f} min")
-        metric3.metric("Model 2 - Model 1", f"{wait2 - wait1:+.1f} min")
-
-    st.markdown("**Test-set metrics**")
-    st.dataframe(nhamcs_metrics_table(artifacts["nhamcs_metrics"]), hide_index=True)
+    try:
+        render_wait_time_tab(artifacts, keep_tab_selected)
+    except Exception as exc:
+        st.error("Wait-Time tab failed to load.")
+        st.exception(exc)
 
 with admission_tab:
-    st.subheader("Yale Admission Risk")
-    st.caption("Admission disposition predicted from information available at arrival or triage.")
-    complaint_columns = artifacts["yale_features"]["cc_columns"]
-    complaint_lookup = {complaint_label(column): column for column in complaint_columns}
+    st.subheader("Hospital Chance of Admission Screening")
+    st.write(
+        "Upload ED triage records and review the estimated chance of admission for each visit."
+    )
 
-    with st.form("admission_form"):
-        col1, col2, col3 = st.columns(3)
-        yale_age = col1.number_input("Age", min_value=18, max_value=100, value=62, key="yale_age")
-        esi = col2.selectbox("ESI level", [1, 2, 3, 4, 5], index=1)
-        complaint_name = col3.selectbox("Chief complaint", sorted(complaint_lookup))
-        heart_rate = col1.number_input("Heart rate", min_value=30, max_value=250, value=104)
-        yale_sbp = col2.number_input(
-            "Systolic blood pressure", min_value=50, max_value=260, value=145, key="yale_sbp"
-        )
-        oxygen_saturation = col3.number_input(
-            "Oxygen saturation", min_value=50, max_value=100, value=96
-        )
-        predict_admission = st.form_submit_button(
-            "Estimate admission risk",
-            type="primary",
-            on_click=keep_tab_selected,
+    with st.container(border=True):
+        yale_upload = st.file_uploader(
+            "Upload CSV or Excel triage records",
+            type=["csv", "xlsx"],
+            key="yale_batch_upload",
+            on_change=keep_tab_selected,
             args=("Admission Risk",),
         )
+        with st.expander("Required upload format"):
+            st.markdown("**Required columns**")
+            st.code(", ".join(YALE_UPLOAD_COLUMNS), language=None)
+            st.write(
+                "Each row represents one ED visit. `chief_complaints` accepts one "
+                "or more recognized `cc_*` codes separated by semicolons."
+            )
+            st.code(
+                "cc_chestpain;cc_shortnessofbreath",
+                language=None,
+            )
+            st.caption(
+                "`patient_name` is optional and is used only as a display label. "
+                "Full detailed results can be downloaded after prediction."
+            )
 
-    if predict_admission:
-        yale_row = make_yale_row(
-            artifacts["yale_features"],
-            {
-                "age": yale_age,
-                "esi": esi,
-                "chief_complaint": complaint_lookup[complaint_name],
-                "heart_rate": heart_rate,
-                "systolic_bp": yale_sbp,
-                "oxygen_saturation": oxygen_saturation,
-            },
-        )
-        prediction = int(artifacts["yale_model"].predict(yale_row)[0])
-        probability = float(artifacts["yale_model"].predict_proba(yale_row)[0, 1])
-        result1, result2 = st.columns(2)
-        result1.metric("Admission probability", f"{probability:.1%}")
-        result2.metric("Predicted disposition", "Admit" if prediction else "Discharge")
+    if yale_upload is not None:
+        try:
+            uploaded_yale_data = read_yale_upload(
+                yale_upload.name,
+                yale_upload.getvalue(),
+            )
+            upload_results = predict_yale_upload(
+                uploaded_yale_data,
+                artifacts["yale_model"],
+                artifacts["yale_features"],
+            )
+        except (ValueError, TypeError, OSError) as exc:
+            st.error(str(exc))
+        else:
+            st.success(f"Generated predictions for {len(upload_results):,} uploaded rows.")
+            summary = yale_prediction_summary(upload_results)
 
-    st.markdown("**Test-set metrics**")
-    st.dataframe(yale_metrics_table(artifacts["yale_metrics"]), hide_index=True)
+            summary_columns = st.columns(5)
+            summary_columns[0].metric("Total visits", f"{summary['total']:,}")
+            summary_columns[1].metric("Likely admit", f"{summary['admit']:,}")
+            summary_columns[2].metric(
+                "Likely discharge",
+                f"{summary['discharge']:,}",
+            )
+            summary_columns[3].metric(
+                "Highest chance",
+                f"{summary['highest_probability']:.1%}",
+            )
+            summary_columns[4].metric(
+                "Lowest chance",
+                f"{summary['lowest_probability']:.1%}",
+            )
+
+            st.info(
+                "These scores are for review support only and are not medical decisions."
+            )
+
+            ranked_results = upload_results.reset_index(drop=True).copy()
+            ranked_results["_row_number"] = np.arange(1, len(ranked_results) + 1)
+
+            st.markdown("### Top Cases in This Upload")
+            top_visits = ranked_results.nlargest(3, "admission_probability")
+            top_columns = st.columns(len(top_visits))
+            for card_column, (_, row) in zip(top_columns, top_visits.iterrows()):
+                with card_column:
+                    show_yale_visit_card(row, int(row["_row_number"]))
+
+            st.markdown("### Lowest Chance Cases")
+            bottom_visits = ranked_results.nsmallest(3, "admission_probability")
+            bottom_columns = st.columns(len(bottom_visits))
+            for card_column, (_, row) in zip(bottom_columns, bottom_visits.iterrows()):
+                with card_column:
+                    show_yale_visit_card(row, int(row["_row_number"]))
+
+            st.markdown("### All uploaded visits")
+            st.dataframe(
+                yale_results_table(upload_results),
+                hide_index=True,
+                use_container_width=True,
+                column_config={
+                    "Patient": st.column_config.TextColumn(width="medium"),
+                    "Chance of Admission": st.column_config.TextColumn(width="small"),
+                    "Likely Outcome": st.column_config.TextColumn(width="small"),
+                    "Summary": st.column_config.TextColumn(width="large"),
+                },
+            )
+            st.download_button(
+                "Download full prediction results",
+                data=upload_results.to_csv(index=False).encode("utf-8"),
+                file_name="yale_admission_predictions.csv",
+                mime="text/csv",
+                on_click=keep_tab_selected,
+                args=("Admission Risk",),
+            )
+
+    with st.expander("Model performance details"):
+        st.dataframe(yale_metrics_table(artifacts["yale_metrics"]), hide_index=True)
 
 with monitoring_tab:
-    st.subheader("Monitoring and Governance")
-    st.markdown("**Model drift**")
-    st.write("Track changes in input distributions and prediction performance over time.")
-    st.markdown("**COVID-era shift**")
-    st.write("Evaluate NHAMCS performance separately before, during, and after COVID-era changes.")
-    st.markdown("**Missing values**")
-    st.write("Monitor missingness by feature and confirm that deployment inputs match training rules.")
-    st.markdown("**Fairness and subgroup performance**")
-    st.write("Compare errors across demographic groups without treating demographic associations as causal.")
-    st.markdown("**Retraining plan**")
-    st.write("Retrain after material drift, data-definition changes, or sustained performance decline.")
+    st.subheader("Monitoring Plan")
+    st.write(
+        "These checks describe what would need to be reviewed before and during real-world "
+        "use. This page does not display live hospital monitoring."
+    )
+
+    wait_monitoring, admission_monitoring = st.columns(2)
+    with wait_monitoring:
+        with st.container(border=True):
+            st.markdown("### Wait-Time Model Monitoring")
+            st.markdown(
+                """
+                **Prediction quality:** Track MAE and RMSE over time and inspect residuals for
+                systematic under- or over-prediction.
+
+                **Subgroup review:** Compare errors by race, ethnicity, insurance, arrival
+                mode, and triage priority.
+
+                **Data drift:** Watch for changes across years, hospitals, patient mix, coding,
+                and missingness relative to the 2007-2022 NHAMCS data.
+
+                **Operational gaps:** Staffing, available beds, queue length, crowding, and
+                hospital capacity are not included and should be monitored separately.
+
+                **Deployment compatibility:** The NHAMCS artifacts were exported with
+                scikit-learn 1.9.0 and currently load under 1.6.1 with a version warning.
+                Re-exporting under the deployment version is necessary before production use.
+                """
+            )
+
+    with admission_monitoring:
+        with st.container(border=True):
+            st.markdown("### Admission Model Monitoring")
+            st.markdown(
+                """
+                **Calibration:** Compare predicted admission chances with observed admission
+                rates to determine whether the scores remain well calibrated.
+
+                **Performance:** Track ROC-AUC, precision, recall, F1, and the confusion matrix
+                over time. Review the prediction threshold and false negatives among patients
+                who were admitted.
+
+                **Fairness and validation:** Compare performance across demographic groups and
+                complete external validation using data from other hospitals.
+
+                **Data quality and drift:** Monitor chief complaint coding, missingness, ESI
+                and vital-sign collection, and changes in triage or admission patterns.
+                """
+            )
+
+    with st.container(border=True):
+        st.markdown("### Human Oversight")
+        st.write(
+            "These outputs support review only. Clinicians and hospital staff remain "
+            "responsible for patient-care and operational decisions. Any real deployment "
+            "would require documented intended use, privacy and governance review, local "
+            "validation, periodic performance review, and clear retraining or rollback rules."
+        )
