@@ -419,12 +419,15 @@ def _draw_compare_bars(labels: list[str], values: list[float], title: str):
     """Matplotlib bars — reliable in Streamlit even when Vega charts fail."""
     import matplotlib.pyplot as plt
 
-    fig, ax = plt.subplots(figsize=(5.5, 3.2))
+    fig, ax = plt.subplots(figsize=(4.8, 3.0), dpi=120)
     colors = ["#5B7C99", "#2EC4B6"][: len(values)]
+    if len(values) == 2 and "What-if" in labels:
+        colors = ["#2EC4B6", "#E9C46A"]
     bars = ax.bar(labels, values, color=colors, width=0.55)
-    ax.set_ylabel("Minutes")
-    ax.set_title(title, fontsize=11, pad=8)
-    ax.set_ylim(0, max(values) * 1.25 if max(values) > 0 else 10)
+    ax.set_ylabel("Minutes", fontsize=9)
+    ax.set_title(title, fontsize=10, pad=6)
+    ymax = max(values) if values else 10
+    ax.set_ylim(0, max(ymax * 1.28, 10))
     for bar, val in zip(bars, values):
         ax.text(
             bar.get_x() + bar.get_width() / 2,
@@ -432,9 +435,10 @@ def _draw_compare_bars(labels: list[str], values: list[float], title: str):
             f"{val:.0f}",
             ha="center",
             va="bottom",
-            fontsize=11,
+            fontsize=10,
             fontweight="bold",
         )
+    ax.tick_params(axis="both", labelsize=8)
     ax.spines["top"].set_visible(False)
     ax.spines["right"].set_visible(False)
     fig.tight_layout()
@@ -449,40 +453,25 @@ def render_single_patient_charts(
     features1: list[str],
     features2: list[str],
 ) -> None:
-    """Simple interactive charts for one patient estimate."""
+    """Side-by-side comparison charts for one patient estimate."""
     try:
         st.markdown("---")
-        st.subheader("Visualize this estimate")
-        st.write(
-            f"Main estimate **{wait2:.0f} min** · Model 1 (access only) **{wait1:.0f} min**"
+        st.subheader("Compare estimates")
+        st.markdown(
+            f"""
+These charts help you read the **~{wait2:.0f} minute** main estimate.
+
+- **Left chart:** compares our two research models for *this* patient.  
+- **Right chart:** shows what happens if you change arrival mode or triage (what-if).  
+- Taller bar = **longer predicted wait**.
+            """
         )
 
-        left, right = st.columns(2)
-        with left:
-            st.caption("Model 1 vs Model 2")
-            fig1 = _draw_compare_bars(
-                ["Access only", "Main estimate"],
-                [float(wait1), float(wait2)],
-                "Predicted wait (minutes)",
-            )
-            st.pyplot(fig1, clear_figure=True)
-
-        with right:
-            st.caption("Where this wait sits (0–60 min scale)")
-            capped = min(max(float(wait2), 0.0), 60.0)
-            st.progress(capped / 60.0)
-            st.write(f"**{wait2:.0f} minutes** on a 0–60 scale")
-            band = wait_band_label(wait2)
-            if wait2 < 20:
-                st.success(band)
-            elif wait2 < 40:
-                st.warning(band)
-            else:
-                st.error(band)
-            st.caption("Rough bands: under 20 · 20–40 · over 40 minutes.")
-
-        st.markdown("##### What if something changed?")
-        st.caption("Change arrival or triage — the chart updates right away.")
+        st.markdown("**Step 1 — Try a what-if (optional)**")
+        st.caption(
+            "Change arrival or triage below, then look at the **right** chart. "
+            "The left chart stays fixed to your original form inputs."
+        )
         arrival_options = [
             "Walk-in/Other",
             "Ambulance",
@@ -493,7 +482,7 @@ def render_single_patient_charts(
         s1, s2 = st.columns(2)
         with s1:
             alt_arrival = st.selectbox(
-                "Arrival mode",
+                "What-if arrival mode",
                 arrival_options,
                 index=(
                     arrival_options.index(patient["arrival_mode"])
@@ -501,10 +490,11 @@ def render_single_patient_charts(
                     else 0
                 ),
                 key="viz_arrival_whatif",
+                help="Ambulance usually predicts a shorter wait than walk-in.",
             )
         with s2:
             alt_triage = st.selectbox(
-                "Triage acuity",
+                "What-if triage acuity",
                 triage_options,
                 index=(
                     triage_options.index(patient["triage_acuity"])
@@ -512,6 +502,7 @@ def render_single_patient_charts(
                     else 1
                 ),
                 key="viz_triage_whatif",
+                help="High acuity usually predicts a shorter wait than Low.",
             )
 
         scenario = patient.copy()
@@ -526,61 +517,106 @@ def render_single_patient_charts(
             st.warning(f"What-if prediction failed: {exc}")
             scenario_wait = wait2
 
-        fig2 = _draw_compare_bars(
-            ["Your inputs", "What-if"],
-            [float(wait2), float(scenario_wait)],
-            "What-if comparison (Model 2)",
-        )
-        st.pyplot(fig2, clear_figure=True)
+        st.markdown("**Step 2 — Read the two charts side by side**")
+        left, right = st.columns(2, gap="medium")
+        with left:
+            st.markdown("##### Chart A · Model 1 vs Model 2")
+            st.markdown(
+                """
+**What this shows:** two estimates for the **same patient**.
 
-        delta = scenario_wait - wait2
-        if abs(delta) < 0.5:
-            st.info("This what-if is about the **same** as your original estimate.")
-        elif delta < 0:
-            st.info(
-                f"What-if is **{abs(delta):.0f} min shorter** "
-                f"({scenario_wait:.0f} vs {wait2:.0f} min)."
+| Bar | Meaning |
+|---|---|
+| **Access only (Model 1)** | Uses demographics/access only (age, race, insurance, arrival…). Ignores triage & vitals. |
+| **Main estimate (Model 2)** | Adds clinical urgency (triage, pulse, BP). **This is the number to quote.** |
+
+If the bars are similar, clinical details didn’t change the story much for this case.
+                """
             )
-        else:
-            st.info(
-                f"What-if is **{delta:.0f} min longer** "
-                f"({scenario_wait:.0f} vs {wait2:.0f} min)."
+            fig1 = _draw_compare_bars(
+                ["Access only", "Main estimate"],
+                [float(wait1), float(wait2)],
+                f"Same patient · {wait1:.0f} vs {wait2:.0f} min",
             )
+            st.pyplot(fig1, clear_figure=True, width="stretch")
+            st.info(
+                f"**Takeaway:** Quote **{wait2:.0f} min** (main estimate). "
+                f"Access-only was **{wait1:.0f} min** "
+                f"(difference {wait2 - wait1:+.0f} min)."
+            )
+
+        with right:
+            st.markdown("##### Chart B · Your inputs vs what-if")
+            st.markdown(
+                f"""
+**What this shows:** how the **main estimate (Model 2)** moves if arrival/triage change.
+
+| Bar | Meaning |
+|---|---|
+| **Your inputs** | Wait from the form you submitted (**{wait2:.0f} min**). |
+| **What-if** | Wait after changing arrival to **{alt_arrival}** and triage to **{alt_triage}**. |
+
+Use this to show that ambulance / high acuity often shorten predicted waits.
+                """
+            )
+            fig2 = _draw_compare_bars(
+                ["Your inputs", "What-if"],
+                [float(wait2), float(scenario_wait)],
+                f"What-if · {wait2:.0f} → {scenario_wait:.0f} min",
+            )
+            st.pyplot(fig2, clear_figure=True, width="stretch")
+            delta = scenario_wait - wait2
+            if abs(delta) < 0.5:
+                st.info(
+                    "**Takeaway:** This what-if barely changes the wait — "
+                    "try Ambulance or High triage to see a clearer shift."
+                )
+            elif delta < 0:
+                st.success(
+                    f"**Takeaway:** What-if is **{abs(delta):.0f} min shorter** "
+                    f"({scenario_wait:.0f} vs {wait2:.0f} min)."
+                )
+            else:
+                st.warning(
+                    f"**Takeaway:** What-if is **{delta:.0f} min longer** "
+                    f"({scenario_wait:.0f} vs {wait2:.0f} min)."
+                )
+
+        st.markdown("**Step 3 — How long is this wait, roughly?**")
+        capped = min(max(float(wait2), 0.0), 60.0)
+        st.progress(capped / 60.0)
+        band = wait_band_label(wait2)
+        st.markdown(
+            f"""
+Main estimate **{wait2:.0f} min** on a simple 0–60 scale → **{band}**.
+
+| Band | Rough guide |
+|---|---|
+| Under 20 min | Shorter than typical |
+| 20–40 min | Around a typical ED wait |
+| Over 40 min | Longer than typical |
+
+These bands are for intuition only — not clinical cutoffs.
+            """
+        )
     except Exception as exc:
         st.error("Could not draw charts.")
         st.exception(exc)
 
 
-def render_wait_time_tab(artifacts: dict, keep_tab_selected) -> None:
-    """Single-patient wait estimate (primary) + optional hospital CSV batch."""
-    _inject_styles()
-
-    st.markdown(
-        """
-        <div class="wait-hero">
-          <h3>How long might this patient wait?</h3>
-          <p>
-            Enter one patient’s arrival details. The model estimates minutes until
-            first provider contact using NHAMCS survey patterns (research demo only).
-          </p>
-          <span class="wait-chip">Not medical advice · associations, not guarantees</span>
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
-
-    features1 = artifacts["nhamcs_features1"]
-    features2 = artifacts["nhamcs_features2"]
-
-    # ------------------------------------------------------------------
-    # Single patient form
-    # ------------------------------------------------------------------
+def _render_single_patient_form(artifacts: dict, keep_tab_selected, features1, features2) -> None:
     st.markdown("#### Patient information")
+    st.info(
+        "Fill in **one patient’s** arrival details, then estimate wait time. "
+        "Best for demos and exploring a single case."
+    )
     with st.form("single_patient_wait_form"):
         c1, c2, c3 = st.columns(3)
         age = c1.number_input("Age (years)", min_value=0, max_value=100, value=35)
         sex = c2.selectbox("Sex", ["Female", "Male"])
-        survey_year = c3.number_input("Visit year", min_value=2007, max_value=2022, value=2019)
+        survey_year = c3.number_input(
+            "Visit year", min_value=2007, max_value=2022, value=2019
+        )
 
         c1, c2, c3 = st.columns(3)
         race = c1.selectbox(
@@ -653,7 +689,9 @@ def render_wait_time_tab(artifacts: dict, keep_tab_selected) -> None:
 
         c1, c2, c3 = st.columns(3)
         pulse = c1.number_input("Pulse", min_value=20, max_value=250, value=88)
-        systolic_bp = c2.number_input("Systolic blood pressure", min_value=50, max_value=260, value=125)
+        systolic_bp = c2.number_input(
+            "Systolic blood pressure", min_value=50, max_value=260, value=125
+        )
         c3.caption("Pulse & BP used by Model 2 (clinical).")
 
         submitted = st.form_submit_button(
@@ -696,62 +734,316 @@ def render_wait_time_tab(artifacts: dict, keep_tab_selected) -> None:
             st.error(f"Could not estimate wait time: {exc}")
 
     single = st.session_state.get("single_wait")
-    if single:
-        wait1 = single["wait1"]
-        wait2 = single["wait2"]
-        st.markdown("---")
-        st.markdown("#### Estimated wait")
+    if not single:
+        return
 
-        st.success(
-            f"### About **{wait2:.0f} minutes**\n\n"
-            "Estimated time until first provider contact "
-            "(using triage acuity and vitals, plus demographics & access)."
-        )
-        st.caption(
-            "Research estimate from national ED survey data — not a guarantee of real wait time, "
-            "and not medical advice."
-        )
+    wait1 = single["wait1"]
+    wait2 = single["wait2"]
+    st.markdown("---")
+    st.markdown("#### Estimated wait")
+    st.success(
+        f"### About **{wait2:.0f} minutes**\n\n"
+        "Estimated time until first provider contact "
+        "(using triage acuity and vitals, plus demographics & access)."
+    )
+    st.caption(
+        "Research estimate from national ED survey data — not a guarantee of real wait time, "
+        "and not medical advice."
+    )
 
-        render_single_patient_charts(
-            artifacts,
-            single["patient"],
-            wait1,
-            wait2,
-            features1,
-            features2,
-        )
+    render_single_patient_charts(
+        artifacts,
+        single["patient"],
+        wait1,
+        wait2,
+        features1,
+        features2,
+    )
 
-        with st.expander("Why might you see two different times? (research comparison)"):
-            st.markdown(
-                """
+    with st.expander("Why might you see two different times? (research comparison)"):
+        st.markdown(
+            """
 **Simple takeaway**
 
 | Number | What it means for you |
 |---|---|
 | **Main estimate (Model 2)** — shown above | Best guess of wait using **everything we know**: who the patient is *and* how urgent they look (triage + vitals). **Use this one.** |
 | **Model 1** — access/demographics only | What the wait might look like if we **ignored** triage and vitals. Useful for research, not the number to quote. |
-| **Difference** | How much clinical urgency changed the estimate. Small difference → acuity didn’t move the needle much. Larger difference → triage/vitals mattered for this case. |
-
-**Why we keep both**
-
-Our research asks: *do people wait longer mainly because they’re sicker, or do factors like insurance and race still matter?*  
-Comparing Model 1 → Model 2 helps answer that. For a demo patient, you only need the **main estimate**.
+| **Difference** | How much clinical urgency changed the estimate. |
 
 **For this patient**
-                """
-            )
-            c1, c2, c3 = st.columns(3)
-            c1.metric("Model 1 (ignored clinical urgency)", f"{wait1:.0f} min")
-            c2.metric("Model 2 (main estimate)", f"{wait2:.0f} min")
-            c3.metric("How much clinical info changed it", f"{wait2 - wait1:+.0f} min")
+            """
+        )
+        c1, c2, c3 = st.columns(3)
+        c1.metric("Model 1 (access only)", f"{wait1:.0f} min")
+        c2.metric("Model 2 (main estimate)", f"{wait2:.0f} min")
+        c3.metric("Difference", f"{wait2 - wait1:+.0f} min")
 
-        with st.expander("Patient inputs used"):
-            p = single["patient"]
-            st.write(
-                f"- Age {p['age_years']}, {p['sex']}, {p['race']}, {p['ethnicity']}\n"
-                f"- {p['payment_type']} · {p['arrival_mode']} · triage {p['triage_acuity']}\n"
-                f"- Pulse {p['pulse']}, BP {p['systolic_bp']} · {p['visit_month']} {p['survey_year']}"
-            )
+    with st.expander("Patient inputs used"):
+        p = single["patient"]
+        st.write(
+            f"- Age {p['age_years']}, {p['sex']}, {p['race']}, {p['ethnicity']}\n"
+            f"- {p['payment_type']} · {p['arrival_mode']} · triage {p['triage_acuity']}\n"
+            f"- Pulse {p['pulse']}, BP {p['systolic_bp']} · {p['visit_month']} {p['survey_year']}"
+        )
+
+
+def _render_csv_batch(artifacts: dict, keep_tab_selected, features1, features2) -> None:
+    st.markdown("#### Upload visit CSV")
+    st.info(
+        "Upload a file with **many patients** (one row per visit). "
+        "The app scores Model 1 and Model 2 for each row and lets you download the results. "
+        "Use this for a hospital-style batch demo."
+    )
+
+    template_bytes = build_template_bytes()
+    d1, d2 = st.columns(2)
+    with d1:
+        st.download_button(
+            "Download CSV template",
+            data=template_bytes,
+            file_name="nhamcs_wait_time_upload_template.csv",
+            mime="text/csv",
+            width="stretch",
+            key="wait_template_download",
+        )
+    with d2:
+
+        def _load_demo_visits() -> None:
+            keep_tab_selected("Wait-Time Prediction")
+            st.session_state["wait_raw_df"] = load_demo_dataframe()
+            st.session_state["wait_upload_key"] = "demo_builtin"
+            st.session_state.pop("wait_preds", None)
+
+        st.button(
+            "Load demo CSV",
+            width="stretch",
+            key="wait_load_demo",
+            on_click=_load_demo_visits,
+        )
+
+    uploaded = st.file_uploader(
+        "CSV of ED visits",
+        type=["csv"],
+        key="wait_file_uploader",
+    )
+
+    raw_df = None
+    if uploaded is not None:
+        try:
+            raw_df = pd.read_csv(uploaded)
+            upload_key = f"{uploaded.name}:{uploaded.size}"
+            if st.session_state.get("wait_upload_key") != upload_key:
+                st.session_state["wait_upload_key"] = upload_key
+                st.session_state["wait_raw_df"] = raw_df
+                st.session_state.pop("wait_preds", None)
+        except Exception as exc:
+            st.error(f"Could not read CSV: {exc}")
+            raw_df = None
+    elif "wait_raw_df" in st.session_state:
+        raw_df = st.session_state["wait_raw_df"]
+
+    if raw_df is None or raw_df.empty:
+        st.caption("Tip: click **Load demo CSV** if you just want to try the flow.")
+        return
+
+    st.dataframe(raw_df.head(5), width="stretch", hide_index=True)
+    if not looks_encoded(raw_df, features2):
+        problems = validate_friendly(raw_df)
+        if problems:
+            for problem in problems:
+                st.error(problem)
+            return
+
+    if st.button(
+        "Run batch predictions",
+        type="primary",
+        key="wait_run_preds",
+        on_click=keep_tab_selected,
+        args=("Wait-Time Prediction",),
+        width="stretch",
+    ):
+        enc1 = encode_dataframe(raw_df, features1)
+        enc2 = encode_dataframe(raw_df, features2)
+        pred1 = predict_batch(artifacts["nhamcs_model1"], features1, enc1)
+        pred2 = predict_batch(artifacts["nhamcs_model2"], features2, enc2)
+        results = raw_df.copy()
+        if "patient_id" not in results.columns:
+            results.insert(0, "patient_id", [f"row_{i+1}" for i in range(len(results))])
+        results["pred_wait_model1_min"] = np.round(pred1, 1)
+        results["pred_wait_model2_min"] = np.round(pred2, 1)
+        results["pred_diff_m2_minus_m1_min"] = np.round(pred2 - pred1, 1)
+        st.session_state["wait_preds"] = results
+
+    results = st.session_state.get("wait_preds")
+    if results is None:
+        return
+
+    st.markdown("---")
+    st.markdown("#### Batch results")
+    st.markdown(
+        """
+After scoring every row, we show **summary numbers** and **two charts**:
+
+1. **Average wait** — Model 1 vs Model 2 across the whole file  
+2. **Per-visit lines** — how each visit’s two estimates compare
+        """
+    )
+    m1, m2, m3 = st.columns(3)
+    m1.metric("Visits scored", f"{len(results):,}")
+    m2.metric("Mean · Model 1", f"{results['pred_wait_model1_min'].mean():.1f} min")
+    m3.metric("Mean · Model 2", f"{results['pred_wait_model2_min'].mean():.1f} min")
+
+    chart_left, chart_right = st.columns(2, gap="medium")
+    with chart_left:
+        st.markdown("##### Chart A · Average wait (Model 1 vs Model 2)")
+        st.markdown(
+            """
+**What this shows:** the **mean** predicted wait across all uploaded visits.
+
+| Bar | Meaning |
+|---|---|
+| **Model 1** | Average if we ignore triage/vitals |
+| **Model 2** | Average using full info (quote this for batch demos) |
+
+If means are close, clinical features didn’t shift the batch average much.
+            """
+        )
+        fig_means = _draw_compare_bars(
+            ["Model 1", "Model 2"],
+            [
+                float(results["pred_wait_model1_min"].mean()),
+                float(results["pred_wait_model2_min"].mean()),
+            ],
+            "Average predicted wait",
+        )
+        st.pyplot(fig_means, clear_figure=True, width="stretch")
+    with chart_right:
+        st.markdown("##### Chart B · Each visit’s two estimates")
+        st.markdown(
+            """
+**What this shows:** for **every row** in the CSV:
+
+- Blue line = Model 1 (access only)  
+- Teal line = Model 2 (main estimate)  
+
+X-axis = visit order in the file · Y-axis = minutes.  
+Where the teal line is below blue, clinical controls shortened that visit’s estimate.
+            """
+        )
+        import matplotlib.pyplot as plt
+
+        fig, ax = plt.subplots(figsize=(4.8, 3.0), dpi=120)
+        x = np.arange(len(results))
+        ax.plot(
+            x,
+            results["pred_wait_model1_min"],
+            marker="o",
+            label="Model 1 (access only)",
+            color="#5B7C99",
+        )
+        ax.plot(
+            x,
+            results["pred_wait_model2_min"],
+            marker="o",
+            label="Model 2 (main)",
+            color="#2EC4B6",
+        )
+        ax.set_xlabel("Visit # in CSV", fontsize=9)
+        ax.set_ylabel("Predicted minutes", fontsize=9)
+        ax.set_title("Per-visit Model 1 vs Model 2", fontsize=10, pad=6)
+        ax.legend(fontsize=8)
+        ax.spines["top"].set_visible(False)
+        ax.spines["right"].set_visible(False)
+        fig.tight_layout()
+        st.pyplot(fig, clear_figure=True, width="stretch")
+
+    st.markdown("**Table · one row per patient**")
+    st.caption(
+        "`pred_wait_model2_min` is the main estimate. "
+        "`pred_diff_m2_minus_m1_min` = Model 2 − Model 1 for that visit."
+    )
+
+    show_cols = [
+        c
+        for c in [
+            "patient_id",
+            "age_years",
+            "payment_type",
+            "arrival_mode",
+            "triage_acuity",
+            "pred_wait_model1_min",
+            "pred_wait_model2_min",
+            "pred_diff_m2_minus_m1_min",
+        ]
+        if c in results.columns
+    ]
+    st.dataframe(results[show_cols], width="stretch", hide_index=True)
+    st.download_button(
+        "Download predictions",
+        data=results.to_csv(index=False).encode("utf-8"),
+        file_name="nhamcs_wait_time_predictions.csv",
+        mime="text/csv",
+        key="wait_preds_download",
+        type="primary",
+        width="stretch",
+    )
+
+
+def render_wait_time_tab(artifacts: dict, keep_tab_selected) -> None:
+    """Wait-time tab with Form vs CSV toggle and side-by-side comparison charts."""
+    _inject_styles()
+
+    st.markdown(
+        """
+        <div class="wait-hero">
+          <h3>How long might this patient wait?</h3>
+          <p>
+            Choose how you want to enter data: a single-patient form, or a CSV of many visits.
+            Estimates are minutes to first provider contact (NHAMCS research demo).
+          </p>
+          <span class="wait-chip">Not medical advice · associations, not guarantees</span>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    features1 = artifacts["nhamcs_features1"]
+    features2 = artifacts["nhamcs_features2"]
+
+    st.markdown("#### How do you want to enter data?")
+    mode = st.radio(
+        "Input mode",
+        ["Single patient form", "CSV upload (many patients)"],
+        horizontal=True,
+        key="wait_input_mode",
+        label_visibility="collapsed",
+        captions=[
+            "One patient · best for demos",
+            "Many visits · hospital-style batch",
+        ],
+    )
+
+    if mode == "Single patient form":
+        st.success(
+            "**Single patient form** — enter one visit’s details and get an estimated wait. "
+            "Use this for demos and exploring what changes the prediction."
+        )
+        try:
+            _render_single_patient_form(artifacts, keep_tab_selected, features1, features2)
+        except Exception as exc:
+            st.error("Something went wrong on the form. Details below:")
+            st.exception(exc)
+    else:
+        st.success(
+            "**CSV upload** — score many visits at once and download a results file. "
+            "Use this for a hospital-style batch workflow."
+        )
+        try:
+            _render_csv_batch(artifacts, keep_tab_selected, features1, features2)
+        except Exception as exc:
+            st.error("Something went wrong on CSV upload. Details below:")
+            st.exception(exc)
 
     with st.expander("Model test performance (for reference)"):
         st.dataframe(
@@ -760,107 +1052,3 @@ Comparing Model 1 → Model 2 helps answer that. For a demo patient, you only ne
             width="stretch",
         )
         st.caption("Typical error is ~31 minutes MAE — use as a rough guide, not an exact clock.")
-
-    # ------------------------------------------------------------------
-    # Optional batch CSV (collapsed)
-    # ------------------------------------------------------------------
-    with st.expander("Optional: upload many patients (CSV)", expanded=False):
-        st.caption("For a hospital batch file. Most demos only need the form above.")
-        template_bytes = build_template_bytes()
-        d1, d2 = st.columns(2)
-        with d1:
-            st.download_button(
-                "Download CSV template",
-                data=template_bytes,
-                file_name="nhamcs_wait_time_upload_template.csv",
-                mime="text/csv",
-                width="stretch",
-                key="wait_template_download",
-            )
-        with d2:
-
-            def _load_demo_visits() -> None:
-                keep_tab_selected("Wait-Time Prediction")
-                st.session_state["wait_raw_df"] = load_demo_dataframe()
-                st.session_state["wait_upload_key"] = "demo_builtin"
-                st.session_state.pop("wait_preds", None)
-
-            st.button(
-                "Load demo CSV",
-                width="stretch",
-                key="wait_load_demo",
-                on_click=_load_demo_visits,
-            )
-
-        uploaded = st.file_uploader(
-            "CSV of ED visits",
-            type=["csv"],
-            key="wait_file_uploader",
-        )
-
-        raw_df = None
-        if uploaded is not None:
-            try:
-                raw_df = pd.read_csv(uploaded)
-                upload_key = f"{uploaded.name}:{uploaded.size}"
-                if st.session_state.get("wait_upload_key") != upload_key:
-                    st.session_state["wait_upload_key"] = upload_key
-                    st.session_state["wait_raw_df"] = raw_df
-                    st.session_state.pop("wait_preds", None)
-            except Exception as exc:
-                st.error(f"Could not read CSV: {exc}")
-                raw_df = None
-        elif "wait_raw_df" in st.session_state:
-            raw_df = st.session_state["wait_raw_df"]
-
-        if raw_df is not None and not raw_df.empty:
-            st.dataframe(raw_df.head(5), width="stretch", hide_index=True)
-            if not looks_encoded(raw_df, features2):
-                problems = validate_friendly(raw_df)
-                if problems:
-                    for problem in problems:
-                        st.error(problem)
-                    return
-
-            if st.button(
-                "Run batch predictions",
-                type="primary",
-                key="wait_run_preds",
-                on_click=keep_tab_selected,
-                args=("Wait-Time Prediction",),
-            ):
-                enc1 = encode_dataframe(raw_df, features1)
-                enc2 = encode_dataframe(raw_df, features2)
-                pred1 = predict_batch(artifacts["nhamcs_model1"], features1, enc1)
-                pred2 = predict_batch(artifacts["nhamcs_model2"], features2, enc2)
-                results = raw_df.copy()
-                if "patient_id" not in results.columns:
-                    results.insert(0, "patient_id", [f"row_{i+1}" for i in range(len(results))])
-                results["pred_wait_model1_min"] = np.round(pred1, 1)
-                results["pred_wait_model2_min"] = np.round(pred2, 1)
-                st.session_state["wait_preds"] = results
-
-            results = st.session_state.get("wait_preds")
-            if results is not None:
-                st.dataframe(
-                    results[
-                        [
-                            c
-                            for c in [
-                                "patient_id",
-                                "pred_wait_model1_min",
-                                "pred_wait_model2_min",
-                            ]
-                            if c in results.columns
-                        ]
-                    ],
-                    width="stretch",
-                    hide_index=True,
-                )
-                st.download_button(
-                    "Download predictions",
-                    data=results.to_csv(index=False).encode("utf-8"),
-                    file_name="nhamcs_wait_time_predictions.csv",
-                    mime="text/csv",
-                    key="wait_preds_download",
-                )

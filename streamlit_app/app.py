@@ -141,7 +141,11 @@ with home_tab:
     )
 
 with wait_tab:
-    render_wait_time_tab(artifacts, keep_tab_selected)
+    try:
+        render_wait_time_tab(artifacts, keep_tab_selected)
+    except Exception as exc:
+        st.error("Wait-Time tab failed to load.")
+        st.exception(exc)
 
 with admission_tab:
     st.subheader("Yale Admission Risk")
