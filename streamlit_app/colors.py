@@ -1,24 +1,21 @@
 """Shared color tokens for the ED Model Explorer UI.
 
-Two independent color layers, kept deliberately non-overlapping so they never
-get confused when shown together (e.g. the wait-time gauge sits right above
-its model-comparison charts on the same page):
+Two muted color layers distinguish status and model comparisons without
+turning the interface into a multi-color dashboard:
 
-- ``STATUS_STYLE`` — what a number *means* (good / warning / serious). Reused
-  by the wait-time gauge and the admission risk badges, so the same color
-  always means the same thing everywhere in the app.
+- ``STATUS_STYLE`` — what a number *means* (good / warning / serious) in the
+  wait-time gauge.
 - ``MODEL_BASELINE`` / ``MODEL_MAIN`` / ``SCENARIO_ALT`` — *which* model or
   scenario a bar or line represents. Reused by every wait-time comparison
-  chart. Chosen from a different hue family than the status colors (blue,
-  violet, magenta vs. green, amber, salmon) so the two layers never collide.
+  chart.
 """
 
 STATUS_STYLE = {
-    "good": {"icon": "↓", "bg": "#0ca30c", "fg": "#ffffff"},
-    "warning": {"icon": "→", "bg": "#fab219", "fg": "#1a1a19"},
-    "serious": {"icon": "↑", "bg": "#ec835a", "fg": "#1a1a19"},
+    "good": {"icon": "↓", "bg": "#6f8797", "fg": "#ffffff"},
+    "warning": {"icon": "→", "bg": "#5f7485", "fg": "#ffffff"},
+    "serious": {"icon": "↑", "bg": "#4f6272", "fg": "#ffffff"},
 }
 
-MODEL_BASELINE = "#2a78d6"  # Model 1 / access-only — the research baseline
-MODEL_MAIN = "#4a3aa7"  # Model 2 / main estimate — the number to quote
-SCENARIO_ALT = "#e87ba4"  # what-if scenario — a hypothetical, not the estimate
+MODEL_BASELINE = "#58748f"  # Model 1 / access-only — the research baseline
+MODEL_MAIN = "#565f7f"  # Model 2 / main estimate
+SCENARIO_ALT = "#7a6c7d"  # what-if scenario — a hypothetical, not the estimate

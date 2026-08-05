@@ -34,3 +34,4 @@ NHAMCS_Data/
 # Agent tooling / local session artifacts
 .agents/
 .claude/
+Datasets_visualizations/

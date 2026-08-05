@@ -15,9 +15,6 @@ except ModuleNotFoundError:
     import colors
 
 TEMPLATE_PATH = Path(__file__).resolve().parent / "sample_wait_time_upload.csv"
-DEMO_PATH = Path(__file__).resolve().parent / "demo_wait_time_upload.csv"
-ASSETS_DIR = Path(__file__).resolve().parent / "assets"
-
 # Friendly CSV columns hospitals fill in (human-readable values).
 FRIENDLY_COLUMNS = [
     "patient_id",
@@ -362,9 +359,9 @@ def build_template_bytes() -> bytes:
     return text.encode("utf-8")
 
 
-def load_demo_dataframe() -> pd.DataFrame:
-    if DEMO_PATH.exists():
-        return pd.read_csv(DEMO_PATH)
+def load_example_dataframe() -> pd.DataFrame:
+    if TEMPLATE_PATH.exists():
+        return pd.read_csv(TEMPLATE_PATH)
     return pd.read_csv(StringIO(build_template_csv()))
 
 
@@ -375,7 +372,7 @@ def _inject_styles() -> None:
         .wait-hero {
             padding: 1.1rem 1.25rem;
             border-radius: 12px;
-            background: linear-gradient(135deg, #0d366b 0%, #184f95 55%, #2a78d6 100%);
+            background: linear-gradient(135deg, #263746 0%, #354b5d 100%);
             border: 1px solid rgba(255,255,255,0.08);
             margin-bottom: 1rem;
         }
@@ -396,7 +393,7 @@ def _inject_styles() -> None:
             margin-top: 0.75rem;
             padding: 0.2rem 0.65rem;
             border-radius: 999px;
-            background: rgba(255,255,255,0.14);
+            background: rgba(255,255,255,0.1);
             color: #eef2f8;
             font-size: 0.78rem;
             border: 1px solid rgba(255,255,255,0.24);
@@ -406,6 +403,13 @@ def _inject_styles() -> None:
             border: 1px solid rgba(255,255,255,0.07);
             border-radius: 10px;
             padding: 0.55rem 0.75rem;
+        }
+        button[kind="primary"] {
+            background: #526b7d !important;
+            border-color: #526b7d !important;
+        }
+        button[kind="secondary"] {
+            border-color: #6d7f8d !important;
         }
         .wait-gauge {
             margin-top: 0.25rem;
@@ -632,7 +636,7 @@ These charts help you read the **~{wait2:.0f} minute** main estimate.
 | Bar | Meaning |
 |---|---|
 | **Access only (Model 1)** | Uses demographics/access only (age, race, insurance, arrival…). Ignores triage & vitals. |
-| **Main estimate (Model 2)** | Adds clinical urgency (triage, pulse, BP). **This is the number to quote.** |
+| **Main estimate (Model 2)** | Adds clinical urgency information such as triage, pulse, and BP. |
 
 If the bars are similar, clinical details didn’t change the story much for this case.
                 """
@@ -699,8 +703,7 @@ Use this to show that ambulance / high acuity often shorten predicted waits.
 def _render_single_patient_form(artifacts: dict, keep_tab_selected, features1, features2) -> None:
     st.markdown("#### Patient information")
     st.info(
-        "Fill in **one patient’s** arrival details, then estimate wait time. "
-        "Best for demos and exploring a single case."
+        "Fill in **one patient’s** arrival details, then review the estimated wait time."
     )
     with st.form("single_patient_wait_form"):
         c1, c2, c3 = st.columns(3)
@@ -860,7 +863,7 @@ def _render_single_patient_form(artifacts: dict, keep_tab_selected, features1, f
 | Number | What it means for you |
 |---|---|
 | **Main estimate (Model 2)** — shown above | Best guess of wait using **everything we know**: who the patient is *and* how urgent they look (triage + vitals). **Use this one.** |
-| **Model 1** — access/demographics only | What the wait might look like if we **ignored** triage and vitals. Useful for research, not the number to quote. |
+| **Model 1** — access/demographics only | What the estimate looks like without triage and vital-sign inputs. |
 | **Difference** | How much clinical urgency changed the estimate. |
 
 **For this patient**
@@ -884,8 +887,7 @@ def _render_csv_batch(artifacts: dict, keep_tab_selected, features1, features2) 
     st.markdown("#### Upload visit CSV")
     st.info(
         "Upload a file with **many patients** (one row per visit). "
-        "The app scores Model 1 and Model 2 for each row and lets you download the results. "
-        "Use this for a hospital-style batch demo."
+        "The app scores Model 1 and Model 2 for each row and lets you download the results."
     )
 
     template_bytes = build_template_bytes()
@@ -901,17 +903,17 @@ def _render_csv_batch(artifacts: dict, keep_tab_selected, features1, features2) 
         )
     with d2:
 
-        def _load_demo_visits() -> None:
+        def _load_example_visits() -> None:
             keep_tab_selected("Wait-Time Prediction")
-            st.session_state["wait_raw_df"] = load_demo_dataframe()
-            st.session_state["wait_upload_key"] = "demo_builtin"
+            st.session_state["wait_raw_df"] = load_example_dataframe()
+            st.session_state["wait_upload_key"] = "example_builtin"
             st.session_state.pop("wait_preds", None)
 
         st.button(
-            "Load demo CSV",
+            "Load example CSV",
             width="stretch",
-            key="wait_load_demo",
-            on_click=_load_demo_visits,
+            key="wait_load_example",
+            on_click=_load_example_visits,
         )
 
     uploaded = st.file_uploader(
@@ -936,7 +938,7 @@ def _render_csv_batch(artifacts: dict, keep_tab_selected, features1, features2) 
         raw_df = st.session_state["wait_raw_df"]
 
     if raw_df is None or raw_df.empty:
-        st.caption("Tip: click **Load demo CSV** if you just want to try the flow.")
+        st.caption("Tip: click **Load example CSV** if you want to try the batch workflow.")
         return
 
     st.dataframe(raw_df.head(5), width="stretch", hide_index=True)
@@ -996,7 +998,7 @@ After scoring every row, we show **summary numbers** and **two charts**:
 | Bar | Meaning |
 |---|---|
 | **Model 1** | Average if we ignore triage/vitals |
-| **Model 2** | Average using full info (quote this for batch demos) |
+| **Model 2** | Average using the full available information |
 
 If means are close, clinical features didn’t shift the batch average much.
             """
@@ -1093,7 +1095,7 @@ def render_wait_time_tab(artifacts: dict, keep_tab_selected) -> None:
           <h3>How long might this patient wait?</h3>
           <p>
             Choose how you want to enter data: a single-patient form, or a CSV of many visits.
-            Estimates are minutes to first provider contact (NHAMCS research demo).
+            Estimates are approximate minutes to first provider contact using NHAMCS data.
           </p>
           <span class="wait-chip">Not medical advice · associations, not guarantees</span>
         </div>
@@ -1107,20 +1109,19 @@ def render_wait_time_tab(artifacts: dict, keep_tab_selected) -> None:
     st.markdown("#### How do you want to enter data?")
     mode = st.radio(
         "Input mode",
-        ["Single patient form", "CSV upload (many patients)"],
+        ["Single Patient Entry", "Batch CSV Upload"],
         horizontal=True,
         key="wait_input_mode",
         label_visibility="collapsed",
         captions=[
-            "One patient · best for demos",
-            "Many visits · hospital-style batch",
+            "Enter one visit and review the estimated wait time.",
+            "Upload multiple visits and compare estimated wait times.",
         ],
     )
 
-    if mode == "Single patient form":
+    if mode == "Single Patient Entry":
         st.success(
-            "**Single patient form** — enter one visit’s details and get an estimated wait. "
-            "Use this for demos and exploring what changes the prediction."
+            "**Single patient entry** — enter one visit and review the estimated wait time."
         )
         try:
             _render_single_patient_form(artifacts, keep_tab_selected, features1, features2)
@@ -1129,55 +1130,11 @@ def render_wait_time_tab(artifacts: dict, keep_tab_selected) -> None:
             st.exception(exc)
     else:
         st.success(
-            "**CSV upload** — score many visits at once and download a results file. "
-            "Use this for a hospital-style batch workflow."
+            "**Batch CSV upload** — upload multiple visits, compare estimated wait times, "
+            "and download the results."
         )
         try:
             _render_csv_batch(artifacts, keep_tab_selected, features1, features2)
         except Exception as exc:
             st.error("Something went wrong on CSV upload. Details below:")
             st.exception(exc)
-
-    with st.expander("Model test performance (for reference)"):
-        st.write(
-            "Two Linear Regression models were trained on 329,249 NHAMCS visits from "
-            "2007-2022. Model 1 uses 41 demographic and access features. Model 2 uses 49 "
-            "features by adding triage priority, selected vital signs, and recent ED use. "
-            "The models predict `log(wait_time_min + 1)`, which the app converts back to "
-            "minutes."
-        )
-        st.dataframe(
-            nhamcs_metrics_table(artifacts["nhamcs_metrics"]),
-            hide_index=True,
-            width="stretch",
-        )
-        st.caption("Typical error is ~31 minutes MAE — use as a rough guide, not an exact clock.")
-
-        coefficient_plot = ASSETS_DIR / "nhamcs_equity_coefficients.png"
-        residual_plot = ASSETS_DIR / "nhamcs_model2_residuals.png"
-        plot_columns = st.columns(2, gap="medium")
-        if coefficient_plot.exists():
-            with plot_columns[0]:
-                st.image(
-                    coefficient_plot,
-                    caption=(
-                        "Selected demographic and access coefficients before and after adding "
-                        "clinical controls. Coefficients show associations, not causal effects."
-                    ),
-                    width="stretch",
-                )
-        if residual_plot.exists():
-            with plot_columns[1]:
-                st.image(
-                    residual_plot,
-                    caption=(
-                        "Model 2 residual diagnostics. The remaining spread reinforces that "
-                        "wait time depends on factors outside the available patient variables."
-                    ),
-                    width="stretch",
-                )
-
-        st.info(
-            "Wait-time prediction is approximate and is most useful for understanding "
-            "patterns, limitations, and disparities rather than exact forecasting."
-        )
