@@ -19,6 +19,11 @@ try:
 except ModuleNotFoundError:
     import wait_time_tab
 
+try:
+    from streamlit_app import colors
+except ModuleNotFoundError:
+    import colors
+
 wait_time_tab = importlib.reload(wait_time_tab)
 render_wait_time_tab = wait_time_tab.render_wait_time_tab
 
@@ -92,6 +97,15 @@ def load_artifacts():
 
 def keep_tab_selected(tab_name: str) -> None:
     st.session_state["active_tab"] = tab_name
+
+
+def go_to_wait_time(mode: str) -> None:
+    keep_tab_selected("Wait-Time Prediction")
+    st.session_state["wait_input_mode"] = mode
+
+
+def go_to_admission() -> None:
+    keep_tab_selected("Admission Risk")
 
 
 def set_one_hot(row: dict, prefix: str, selection: str) -> None:
@@ -370,12 +384,29 @@ def display_number(value) -> str:
     return str(int(numeric_value)) if numeric_value.is_integer() else f"{numeric_value:g}"
 
 
-def admission_risk_level(probability: float) -> str:
+def admission_risk_status(probability: float) -> str:
     if probability >= 0.7:
-        return "High"
+        return "serious"
     if probability >= 0.3:
-        return "Moderate"
-    return "Low"
+        return "warning"
+    return "good"
+
+
+_ADMISSION_RISK_LABELS = {"good": "Low", "warning": "Moderate", "serious": "High"}
+
+
+def admission_risk_level(probability: float) -> str:
+    return _ADMISSION_RISK_LABELS[admission_risk_status(probability)]
+
+
+def admission_risk_badge_html(probability: float) -> str:
+    status = admission_risk_status(probability)
+    style = colors.STATUS_STYLE[status]
+    level = _ADMISSION_RISK_LABELS[status]
+    return (
+        f'<span class="status-badge" style="background:{style["bg"]}; '
+        f'color:{style["fg"]};">{style["icon"]} {level} chance of admission</span>'
+    )
 
 
 def yale_patient_label(row: pd.Series, row_number: int) -> str:
@@ -396,6 +427,9 @@ def yale_visit_summary(row: pd.Series) -> str:
 
 def yale_results_table(results: pd.DataFrame) -> pd.DataFrame:
     rows = results.reset_index(drop=True)
+    risk_status = rows["admission_probability"].map(admission_risk_status)
+    risk_icon = risk_status.map(lambda status: colors.STATUS_STYLE[str(status)]["icon"])
+    risk_level = rows["admission_probability"].map(admission_risk_level)
     return pd.DataFrame(
         {
             "Patient": [
@@ -405,6 +439,7 @@ def yale_results_table(results: pd.DataFrame) -> pd.DataFrame:
             "Chance of Admission": rows["admission_probability"].map(
                 lambda probability: f"{probability:.1%}"
             ),
+            "Risk": risk_icon + " " + risk_level,
             "Likely Outcome": rows["predicted_disposition"],
             "Summary": [yale_visit_summary(row) for _, row in rows.iterrows()],
         }
@@ -426,28 +461,9 @@ def show_yale_visit_card(row: pd.Series, row_number: int) -> None:
     with st.container(border=True):
         st.markdown(f"#### {patient}")
         st.metric("Chance of Admission", f"{probability:.1%}")
+        st.markdown(admission_risk_badge_html(probability), unsafe_allow_html=True)
         st.write(f"**Likely Outcome:** {prediction}")
         st.write(yale_visit_summary(row))
-
-
-def nhamcs_metrics_table(metrics: dict) -> pd.DataFrame:
-    display = metrics["display"]
-    return pd.DataFrame(
-        [
-            {
-                "Model": "Model 1",
-                "R-squared": display["model1"]["r2"],
-                "MAE (minutes)": display["model1"]["mae_minutes"],
-                "RMSE (minutes)": display["model1"]["rmse_minutes"],
-            },
-            {
-                "Model": "Model 2",
-                "R-squared": display["model2"]["r2"],
-                "MAE (minutes)": display["model2"]["mae_minutes"],
-                "RMSE (minutes)": display["model2"]["rmse_minutes"],
-            },
-        ]
-    )
 
 
 def yale_metrics_table(metrics: dict) -> pd.DataFrame:
@@ -465,7 +481,69 @@ def yale_metrics_table(metrics: dict) -> pd.DataFrame:
     )
 
 
-st.set_page_config(page_title="ED Model Explorer", page_icon="+", layout="wide")
+_WAIT_MONITORING_CHECKS = [
+    (
+        "Prediction quality",
+        "Track MAE and RMSE over time and inspect residuals for systematic "
+        "under- or over-prediction.",
+    ),
+    (
+        "Subgroup review",
+        "Compare errors by race, ethnicity, insurance, arrival mode, and "
+        "triage priority.",
+    ),
+    (
+        "Data drift",
+        "Watch for changes across years, hospitals, patient mix, coding, and "
+        "missingness relative to the 2007-2022 NHAMCS data.",
+    ),
+    (
+        "Operational gaps",
+        "Staffing, available beds, queue length, crowding, and hospital "
+        "capacity are not included and should be monitored separately.",
+    ),
+]
+
+_ADMISSION_MONITORING_CHECKS = [
+    (
+        "Calibration",
+        "Compare predicted admission chances with observed admission rates "
+        "to determine whether the scores remain well calibrated.",
+    ),
+    (
+        "Performance",
+        "Track ROC-AUC, precision, recall, F1, and the confusion matrix over "
+        "time. Review the prediction threshold and false negatives among "
+        "patients who were admitted.",
+    ),
+    (
+        "Fairness and validation",
+        "Compare performance across demographic groups and complete "
+        "external validation using data from other hospitals.",
+    ),
+    (
+        "Data quality and drift",
+        "Monitor chief complaint coding, missingness, ESI and vital-sign "
+        "collection, and changes in triage or admission patterns.",
+    ),
+]
+
+
+def render_monitoring_checks(checks: list[tuple[str, str]]) -> None:
+    for title, detail in checks:
+        with st.expander(title):
+            st.write(detail)
+
+
+LOGO_PATH = ASSETS_DIR / "logo.jpeg"
+
+st.set_page_config(
+    page_title="ED Model Explorer",
+    page_icon=str(LOGO_PATH) if LOGO_PATH.exists() else "+",
+    layout="wide",
+)
+if LOGO_PATH.exists():
+    st.logo(str(LOGO_PATH), size="large")
 st.markdown(
     """
     <style>
@@ -488,18 +566,30 @@ st.markdown(
     [data-testid="stDataFrame"] {
         font-size: 1rem;
     }
-    .stTabs [data-baseweb="tab"] p {
-        font-size: 1.02rem;
-        font-weight: 600;
-    }
     [data-testid="stFileUploader"] small {
         font-size: 0.9rem;
+    }
+    .status-badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.3rem;
+        padding: 0.22rem 0.7rem;
+        border-radius: 999px;
+        font-size: 0.85rem;
+        font-weight: 600;
+        white-space: nowrap;
     }
     </style>
     """,
     unsafe_allow_html=True,
 )
-st.title("Emergency Department Wait-Time and Admission Support")
+title_logo_col, title_text_col = st.columns([1, 11], vertical_alignment="center")
+if LOGO_PATH.exists():
+    with title_logo_col:
+        st.image(str(LOGO_PATH), width="stretch")
+with title_text_col:
+    st.title("Drivers of Emergency Department Wait Times")
+
 
 try:
     artifacts = load_artifacts()
@@ -508,46 +598,57 @@ except Exception as exc:
     st.stop()
 
 tab_names = ["Home", "Wait-Time Prediction", "Admission Risk", "Monitoring"]
-home_tab, wait_tab, admission_tab, monitoring_tab = st.tabs(
-    tab_names,
-    default=st.session_state.get("active_tab", "Home"),
-)
+active_tab = st.session_state.get("active_tab", "Home")
 
-with home_tab:
+with st.sidebar:
+    
+   
+
+    st.markdown("**Jump to**")
+    for name in tab_names:
+        st.button(
+            name,
+            key=f"nav_{name}",
+            width="stretch",
+            type="primary" if name == active_tab else "secondary",
+            disabled=name == active_tab,
+            on_click=keep_tab_selected,
+            args=(name,),
+        )
+
+
+if active_tab == "Home":
+
     st.write(
         "This app explores two emergency department outcomes: how long a patient may wait "
         "before first provider contact and the chance that a patient may be admitted after "
         "triage. Each workflow uses a separate dataset and model."
     )
 
-    left, right = st.columns(2)
-    with left:
+    st.markdown("### Quick summary")
+    nhamcs_display = artifacts["nhamcs_metrics"]["display"]
+    yale_test = artifacts["yale_metrics"]["test"]
+    summary_left, summary_right = st.columns(2)
+    with summary_left:
         with st.container(border=True):
-            st.markdown("### Wait-Time Prediction")
-            st.write(
-                "Uses NHAMCS emergency department data to estimate approximate minutes before "
-                "first provider contact. The model considers demographics, access factors, "
-                "arrival mode, triage priority, and selected vital signs."
+            st.markdown("**Wait-Time Prediction**")
+            st.caption("Typical error when estimating minutes to first provider contact.")
+            wait_metric_columns = st.columns(2)
+            wait_metric_columns[0].metric(
+                "R-squared", f"{nhamcs_display['model2']['r2']:.2f}"
             )
-    with right:
+            wait_metric_columns[1].metric(
+                "MAE", f"{nhamcs_display['model2']['mae_minutes']:.0f} min"
+            )
+    with summary_right:
         with st.container(border=True):
-            st.markdown("### Admission Chance Screening")
-            st.write(
-                "Uses Yale ED triage data to estimate each visit's chance of admission. The "
-                "upload workflow uses age, ESI, vitals, arrival details, insurance, prior "
-                "utilization, and chief complaint codes."
+            st.markdown("**Admission Chance Screening**")
+            st.caption("How well the model separates admitted from discharged visits.")
+            yale_metric_columns = st.columns(2)
+            yale_metric_columns[0].metric("Accuracy", f"{yale_test['accuracy']:.0%}")
+            yale_metric_columns[1].metric(
+                "ROC-AUC", f"{artifacts['yale_metrics']['test_roc_auc']:.2f}"
             )
-
-    fact_columns = st.columns(3)
-    fact_columns[0].metric("NHAMCS visits", "329,249", "2007-2022")
-    fact_columns[1].metric("Yale triage visits", "560,484")
-    fact_columns[2].metric("Yale predictors", "219")
-
-    st.write(
-        "The app uses saved model artifacts trained on large emergency department datasets. "
-        "Uploaded Yale files are checked for required columns, valid categories, numeric "
-        "values, and recognized chief complaint codes before predictions are generated."
-    )
 
     st.warning(
         "These outputs are for analysis, education, and review support, not clinical "
@@ -557,117 +658,59 @@ with home_tab:
         "real-world use."
     )
 
-    with st.expander("View Technical Results and Visualizations", expanded=False):
-        st.markdown("#### Wait-Time Model Details")
+elif active_tab == "Wait-Time Prediction":
+    with st.container(border=True):
+        st.markdown("### Wait-Time Prediction")
         st.write(
-            "Two Linear Regression models were trained on 329,249 NHAMCS visits from "
-            "2007-2022. Model 1 uses 41 demographic and access features. Model 2 uses 49 "
-            "features by adding triage priority, selected vital signs, and recent ED use. "
-            "The models predict `log(wait_time_min + 1)`, which the app converts back to "
-            "minutes."
+            "Uses NHAMCS emergency department data to estimate approximate minutes before "
+            "first provider contact. The model considers demographics, access factors, "
+            "arrival mode, triage priority, and selected vital signs."
         )
-        st.dataframe(
-            nhamcs_metrics_table(artifacts["nhamcs_metrics"]),
-            hide_index=True,
+        wait_choice_columns = st.columns(2)
+        wait_choice_columns[0].button(
+            "I have one patient",
+            key="home_wait_single",
             width="stretch",
+            on_click=go_to_wait_time,
+            args=("Single patient form",),
         )
-
-        coefficient_plot = ASSETS_DIR / "nhamcs_equity_coefficients.png"
-        residual_plot = ASSETS_DIR / "nhamcs_model2_residuals.png"
-        plot_columns = st.columns(2, gap="medium")
-        if coefficient_plot.exists():
-            with plot_columns[0]:
-                st.image(
-                    coefficient_plot,
-                    caption=(
-                        "Selected demographic and access coefficients before and after adding "
-                        "clinical controls. Coefficients show associations, not causal effects."
-                    ),
-                    width="stretch",
-                )
-        if residual_plot.exists():
-            with plot_columns[1]:
-                st.image(
-                    residual_plot,
-                    caption=(
-                        "Model 2 residual diagnostics. The remaining spread reinforces that "
-                        "wait time depends on factors outside the available patient variables."
-                    ),
-                    width="stretch",
-                )
-
-        st.info(
-            "Wait-time prediction is approximate and is most useful for understanding "
-            "patterns, limitations, and disparities rather than exact forecasting."
-        )
-
-        st.divider()
-        st.markdown("#### Admission Model Details")
-        st.write(
-            "The Yale model is balanced Logistic Regression trained on 560,484 ED triage "
-            "visits. It uses 219 original predictors, expanded into 262 coefficient terms "
-            "after preprocessing. Inputs cover demographics, insurance, arrival details, "
-            "ESI, vital signs, prior utilization, and chief complaint indicators."
-        )
-        st.dataframe(
-            yale_metrics_table(artifacts["yale_metrics"]),
-            hide_index=True,
+        wait_choice_columns[1].button(
+            "I have a spreadsheet",
+            key="home_wait_batch",
             width="stretch",
-        )
-        yale_test = artifacts["yale_metrics"]["test"]
-        confusion_matrix = pd.DataFrame(
-            yale_test["confusion_matrix"],
-            index=["Actual discharge", "Actual admit"],
-            columns=["Predicted discharge", "Predicted admit"],
-        )
-        st.markdown("**Yale test confusion matrix**")
-        st.dataframe(confusion_matrix, width="stretch")
-
-        yale_roc_plot = ASSETS_DIR / "yale_roc_curve.png"
-        yale_esi_plot = ASSETS_DIR / "yale_admit_rate_by_esi.png"
-        yale_plot_columns = st.columns(2, gap="medium")
-        if yale_roc_plot.exists():
-            with yale_plot_columns[0]:
-                st.image(
-                    yale_roc_plot,
-                    caption=(
-                        "Test ROC curve for the Yale admission model. ROC-AUC summarizes "
-                        "overall separation between admitted and discharged visits."
-                    ),
-                    width="stretch",
-                )
-        if yale_esi_plot.exists():
-            with yale_plot_columns[1]:
-                st.image(
-                    yale_esi_plot,
-                    caption=(
-                        "Observed admission rate by ESI level in the cleaned Yale dataset. "
-                        "This is descriptive evidence, not a causal relationship."
-                    ),
-                    width="stretch",
-                )
-
-        st.info(
-            "The Yale model separates admitted and discharged visits well overall, but real "
-            "use would require calibration, subgroup fairness checks, governance review, "
-            "and external validation."
+            on_click=go_to_wait_time,
+            args=("CSV upload (many patients)",),
         )
 
-        st.markdown("**Supporting artifacts**")
-        st.caption(
-            "NHAMCS evaluation: `models/nhamcs_metrics.json` and the saved Model 1/Model 2 "
-            "bundles. Yale evaluation: `models/yale_metrics.json`, feature definitions in "
-            "`models/yale_features.json`, and the baseline Logistic Regression artifact."
-        )
-
-with wait_tab:
     try:
         render_wait_time_tab(artifacts, keep_tab_selected)
     except Exception as exc:
         st.error("Wait-Time tab failed to load.")
         st.exception(exc)
 
-with admission_tab:
+elif active_tab == "Admission Risk":
+    with st.container(border=True):
+        st.markdown("### Admission Chance Screening")
+        st.write(
+            "Uses Yale ED triage data to estimate each visit's chance of admission. The "
+            "upload workflow uses age, ESI, vitals, arrival details, insurance, prior "
+            "utilization, and chief complaint codes."
+        )
+        admission_choice_columns = st.columns(2)
+        admission_choice_columns[0].button(
+            "I have one patient",
+            key="home_admission_single",
+            width="stretch",
+            disabled=True,
+            help="Single-patient entry isn't available yet — upload a one-row spreadsheet instead.",
+        )
+        admission_choice_columns[1].button(
+            "I have a spreadsheet",
+            key="home_admission_batch",
+            width="stretch",
+            on_click=go_to_admission,
+        )
+
     st.subheader("Hospital Chance of Admission Screening")
     st.write(
         "Upload ED triage records and review the estimated chance of admission for each visit."
@@ -730,6 +773,21 @@ with admission_tab:
                 f"{summary['lowest_probability']:.1%}",
             )
 
+            st.markdown("**Risk mix in this upload**")
+            risk_counts = yale_risk_counts(upload_results)
+            risk_columns = st.columns(3)
+            for risk_column, level in zip(risk_columns, ("Low", "Moderate", "High")):
+                status = {"Low": "good", "Moderate": "warning", "High": "serious"}[level]
+                style = colors.STATUS_STYLE[status]
+                with risk_column:
+                    st.markdown(
+                        f'<div class="status-badge" style="background:{style["bg"]}; '
+                        f'color:{style["fg"]}; width:100%; justify-content:center; '
+                        f'font-size:1rem; padding:0.5rem;">'
+                        f'{style["icon"]} {level}: {risk_counts[level]:,}</div>',
+                        unsafe_allow_html=True,
+                    )
+
             st.info(
                 "These scores are for review support only and are not medical decisions."
             )
@@ -759,6 +817,7 @@ with admission_tab:
                 column_config={
                     "Patient": st.column_config.TextColumn(width="medium"),
                     "Chance of Admission": st.column_config.TextColumn(width="small"),
+                    "Risk": st.column_config.TextColumn(width="small"),
                     "Likely Outcome": st.column_config.TextColumn(width="small"),
                     "Summary": st.column_config.TextColumn(width="large"),
                 },
@@ -773,58 +832,81 @@ with admission_tab:
             )
 
     with st.expander("Model performance details"):
-        st.dataframe(yale_metrics_table(artifacts["yale_metrics"]), hide_index=True)
+        st.write(
+            "The Yale model is balanced Logistic Regression trained on 560,484 ED triage "
+            "visits. It uses 219 original predictors, expanded into 262 coefficient terms "
+            "after preprocessing. Inputs cover demographics, insurance, arrival details, "
+            "ESI, vital signs, prior utilization, and chief complaint indicators."
+        )
+        st.dataframe(
+            yale_metrics_table(artifacts["yale_metrics"]),
+            hide_index=True,
+            width="stretch",
+        )
+        yale_test = artifacts["yale_metrics"]["test"]
+        confusion_matrix = pd.DataFrame(
+            yale_test["confusion_matrix"],
+            index=["Actual discharge", "Actual admit"],
+            columns=["Predicted discharge", "Predicted admit"],
+        )
+        st.markdown("**Yale test confusion matrix**")
+        st.dataframe(confusion_matrix, width="stretch")
 
-with monitoring_tab:
+        yale_roc_plot = ASSETS_DIR / "yale_roc_curve.png"
+        yale_esi_plot = ASSETS_DIR / "yale_admit_rate_by_esi.png"
+        yale_plot_columns = st.columns(2, gap="medium")
+        if yale_roc_plot.exists():
+            with yale_plot_columns[0]:
+                st.image(
+                    yale_roc_plot,
+                    caption=(
+                        "Test ROC curve for the Yale admission model. ROC-AUC summarizes "
+                        "overall separation between admitted and discharged visits."
+                    ),
+                    width="stretch",
+                )
+        if yale_esi_plot.exists():
+            with yale_plot_columns[1]:
+                st.image(
+                    yale_esi_plot,
+                    caption=(
+                        "Observed admission rate by ESI level in the cleaned Yale dataset. "
+                        "This is descriptive evidence, not a causal relationship."
+                    ),
+                    width="stretch",
+                )
+
+        st.info(
+            "The Yale model separates admitted and discharged visits well overall, but real "
+            "use would require calibration, subgroup fairness checks, governance review, "
+            "and external validation."
+        )
+
+        st.markdown("**Supporting artifacts**")
+        st.caption(
+            "`models/yale_metrics.json`, feature definitions in `models/yale_features.json`, "
+            "and the baseline Logistic Regression artifact."
+        )
+
+elif active_tab == "Monitoring":
     st.subheader("Monitoring Plan")
     st.write(
         "These checks describe what would need to be reviewed before and during real-world "
         "use. This page does not display live hospital monitoring."
     )
+    st.caption("Click a check below to see what it means and why it matters.")
 
     wait_monitoring, admission_monitoring = st.columns(2)
     with wait_monitoring:
         with st.container(border=True):
             st.markdown("### Wait-Time Model Monitoring")
-            st.markdown(
-                """
-                **Prediction quality:** Track MAE and RMSE over time and inspect residuals for
-                systematic under- or over-prediction.
+            render_monitoring_checks(_WAIT_MONITORING_CHECKS)
 
-                **Subgroup review:** Compare errors by race, ethnicity, insurance, arrival
-                mode, and triage priority.
-
-                **Data drift:** Watch for changes across years, hospitals, patient mix, coding,
-                and missingness relative to the 2007-2022 NHAMCS data.
-
-                **Operational gaps:** Staffing, available beds, queue length, crowding, and
-                hospital capacity are not included and should be monitored separately.
-
-                **Deployment compatibility:** The NHAMCS artifacts were exported with
-                scikit-learn 1.9.0 and currently load under 1.6.1 with a version warning.
-                Re-exporting under the deployment version is necessary before production use.
-                """
-            )
 
     with admission_monitoring:
         with st.container(border=True):
             st.markdown("### Admission Model Monitoring")
-            st.markdown(
-                """
-                **Calibration:** Compare predicted admission chances with observed admission
-                rates to determine whether the scores remain well calibrated.
-
-                **Performance:** Track ROC-AUC, precision, recall, F1, and the confusion matrix
-                over time. Review the prediction threshold and false negatives among patients
-                who were admitted.
-
-                **Fairness and validation:** Compare performance across demographic groups and
-                complete external validation using data from other hospitals.
-
-                **Data quality and drift:** Monitor chief complaint coding, missingness, ESI
-                and vital-sign collection, and changes in triage or admission patterns.
-                """
-            )
+            render_monitoring_checks(_ADMISSION_MONITORING_CHECKS)
 
     with st.container(border=True):
         st.markdown("### Human Oversight")

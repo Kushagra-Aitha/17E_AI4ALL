@@ -27,3 +27,10 @@ models/yale_model_comparison_metrics.json
 
 # Local source archive
 Datasets_visualizations.zip
+
+# Raw NHAMCS source data (large, regenerable via export_nhamcs_models.py)
+NHAMCS_Data/
+
+# Agent tooling / local session artifacts
+.agents/
+.claude/

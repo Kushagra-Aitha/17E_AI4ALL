@@ -9,8 +9,14 @@ import numpy as np
 import pandas as pd
 import streamlit as st
 
+try:
+    from streamlit_app import colors
+except ModuleNotFoundError:
+    import colors
+
 TEMPLATE_PATH = Path(__file__).resolve().parent / "sample_wait_time_upload.csv"
 DEMO_PATH = Path(__file__).resolve().parent / "demo_wait_time_upload.csv"
+ASSETS_DIR = Path(__file__).resolve().parent / "assets"
 
 # Friendly CSV columns hospitals fill in (human-readable values).
 FRIENDLY_COLUMNS = [
@@ -369,7 +375,7 @@ def _inject_styles() -> None:
         .wait-hero {
             padding: 1.1rem 1.25rem;
             border-radius: 12px;
-            background: linear-gradient(135deg, #0f2744 0%, #163a5f 55%, #1a4d6d 100%);
+            background: linear-gradient(135deg, #0d366b 0%, #184f95 55%, #2a78d6 100%);
             border: 1px solid rgba(255,255,255,0.08);
             margin-bottom: 1rem;
         }
@@ -381,7 +387,7 @@ def _inject_styles() -> None:
         }
         .wait-hero p {
             margin: 0;
-            color: #c5d4e4;
+            color: #d6e3f5;
             font-size: 0.95rem;
             line-height: 1.45;
         }
@@ -390,10 +396,10 @@ def _inject_styles() -> None:
             margin-top: 0.75rem;
             padding: 0.2rem 0.65rem;
             border-radius: 999px;
-            background: rgba(46, 196, 182, 0.15);
-            color: #9eefe6;
+            background: rgba(255,255,255,0.14);
+            color: #eef2f8;
             font-size: 0.78rem;
-            border: 1px solid rgba(46, 196, 182, 0.35);
+            border: 1px solid rgba(255,255,255,0.24);
         }
         div[data-testid="stMetric"] {
             background: rgba(255,255,255,0.03);
@@ -401,29 +407,127 @@ def _inject_styles() -> None:
             border-radius: 10px;
             padding: 0.55rem 0.75rem;
         }
+        .wait-gauge {
+            margin-top: 0.25rem;
+        }
+        .wait-gauge-header {
+            display: flex;
+            align-items: baseline;
+            justify-content: space-between;
+            flex-wrap: wrap;
+            gap: 0.6rem;
+            margin-bottom: 0.5rem;
+        }
+        .wait-gauge-value {
+            font-size: 1.85rem;
+            font-weight: 700;
+            color: #0b0b0b;
+        }
+        .wait-gauge-track {
+            position: relative;
+            height: 14px;
+            border-radius: 999px;
+            display: flex;
+            overflow: hidden;
+            background: #e1e0d9;
+        }
+        .wait-gauge-zone {
+            height: 100%;
+        }
+        .wait-gauge-zone + .wait-gauge-zone {
+            border-left: 2px solid #fcfcfb;
+        }
+        .wait-gauge-marker {
+            position: absolute;
+            top: 50%;
+            width: 14px;
+            height: 14px;
+            border-radius: 50%;
+            background: #0b0b0b;
+            border: 2px solid #fcfcfb;
+            box-shadow: 0 0 3px rgba(11,11,11,0.5);
+            transform: translate(-50%, -50%);
+        }
+        .wait-gauge-ticks {
+            display: flex;
+            margin-top: 0.35rem;
+            font-size: 0.78rem;
+            color: #898781;
+        }
         </style>
         """,
         unsafe_allow_html=True,
     )
 
 
-def wait_band_label(minutes: float) -> str:
+def wait_band_status(minutes: float) -> str:
     if minutes < 20:
-        return "Shorter than typical"
+        return "good"
     if minutes < 40:
-        return "Around a typical ED wait"
-    return "Longer than typical"
+        return "warning"
+    return "serious"
 
 
-def _draw_compare_bars(labels: list[str], values: list[float], title: str):
+_WAIT_BAND_LABELS = {
+    "good": "Shorter than typical",
+    "warning": "Around a typical ED wait",
+    "serious": "Longer than typical",
+}
+
+
+def wait_band_label(minutes: float) -> str:
+    return _WAIT_BAND_LABELS[wait_band_status(minutes)]
+
+
+def render_wait_gauge(wait_minutes: float) -> None:
+    """Segmented status gauge: colored zones + a marker, instead of a plain progress bar."""
+    scale_max = 60.0
+    marker_pct = max(0.0, min(100.0, (wait_minutes / scale_max) * 100))
+    status = wait_band_status(wait_minutes)
+    band = _WAIT_BAND_LABELS[status]
+    style = colors.STATUS_STYLE[status]
+    good = colors.STATUS_STYLE["good"]["bg"]
+    warning = colors.STATUS_STYLE["warning"]["bg"]
+    serious = colors.STATUS_STYLE["serious"]["bg"]
+
+    st.markdown(
+        f"""
+        <div class="wait-gauge">
+            <div class="wait-gauge-header">
+                <span class="wait-gauge-value">~{wait_minutes:.0f} min</span>
+                <span class="status-badge" style="background:{style['bg']}; color:{style['fg']};">
+                    {style['icon']} {band}
+                </span>
+            </div>
+            <div class="wait-gauge-track">
+                <div class="wait-gauge-zone" style="width:33.34%; background:{good};"></div>
+                <div class="wait-gauge-zone" style="width:33.33%; background:{warning};"></div>
+                <div class="wait-gauge-zone" style="width:33.33%; background:{serious};"></div>
+                <div class="wait-gauge-marker" style="left:{marker_pct:.2f}%;"></div>
+            </div>
+            <div class="wait-gauge-ticks">
+                <span style="width:33.34%; text-align:left;">0 min</span>
+                <span style="width:33.33%; text-align:left;">20 min</span>
+                <span style="width:33.33%; text-align:left;">40+ min</span>
+            </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+    if wait_minutes > scale_max:
+        st.caption(
+            f"Shown at the top of the scale — the actual estimate is {wait_minutes:.0f} min."
+        )
+
+
+def _draw_compare_bars(
+    labels: list[str], values: list[float], title: str, bar_colors: list[str]
+):
     """Matplotlib bars — reliable in Streamlit even when Vega charts fail."""
     import matplotlib.pyplot as plt
 
     fig, ax = plt.subplots(figsize=(4.8, 3.0), dpi=120)
-    colors = ["#5B7C99", "#2EC4B6"][: len(values)]
-    if len(values) == 2 and "What-if" in labels:
-        colors = ["#2EC4B6", "#E9C46A"]
-    bars = ax.bar(labels, values, color=colors, width=0.55)
+    bars = ax.bar(labels, values, color=bar_colors[: len(values)], width=0.55)
     ax.set_ylabel("Minutes", fontsize=9)
     ax.set_title(title, fontsize=10, pad=6)
     ymax = max(values) if values else 10
@@ -537,6 +641,7 @@ If the bars are similar, clinical details didn’t change the story much for thi
                 ["Access only", "Main estimate"],
                 [float(wait1), float(wait2)],
                 f"Same patient · {wait1:.0f} vs {wait2:.0f} min",
+                [colors.MODEL_BASELINE, colors.MODEL_MAIN],
             )
             st.pyplot(fig1, clear_figure=True, width="stretch")
             st.info(
@@ -563,6 +668,7 @@ Use this to show that ambulance / high acuity often shorten predicted waits.
                 ["Your inputs", "What-if"],
                 [float(wait2), float(scenario_wait)],
                 f"What-if · {wait2:.0f} → {scenario_wait:.0f} min",
+                [colors.MODEL_MAIN, colors.SCENARIO_ALT],
             )
             st.pyplot(fig2, clear_figure=True, width="stretch")
             delta = scenario_wait - wait2
@@ -583,22 +689,8 @@ Use this to show that ambulance / high acuity often shorten predicted waits.
                 )
 
         st.markdown("**Step 3 — How long is this wait, roughly?**")
-        capped = min(max(float(wait2), 0.0), 60.0)
-        st.progress(capped / 60.0)
-        band = wait_band_label(wait2)
-        st.markdown(
-            f"""
-Main estimate **{wait2:.0f} min** on a simple 0–60 scale → **{band}**.
-
-| Band | Rough guide |
-|---|---|
-| Under 20 min | Shorter than typical |
-| 20–40 min | Around a typical ED wait |
-| Over 40 min | Longer than typical |
-
-These bands are for intuition only — not clinical cutoffs.
-            """
-        )
+        render_wait_gauge(wait2)
+        st.caption("These bands are for intuition only — not clinical cutoffs.")
     except Exception as exc:
         st.error("Could not draw charts.")
         st.exception(exc)
@@ -916,6 +1008,7 @@ If means are close, clinical features didn’t shift the batch average much.
                 float(results["pred_wait_model2_min"].mean()),
             ],
             "Average predicted wait",
+            [colors.MODEL_BASELINE, colors.MODEL_MAIN],
         )
         st.pyplot(fig_means, clear_figure=True, width="stretch")
     with chart_right:
@@ -924,11 +1017,11 @@ If means are close, clinical features didn’t shift the batch average much.
             """
 **What this shows:** for **every row** in the CSV:
 
-- Blue line = Model 1 (access only)  
-- Teal line = Model 2 (main estimate)  
+- Blue line = Model 1 (access only)
+- Violet line = Model 2 (main estimate)
 
-X-axis = visit order in the file · Y-axis = minutes.  
-Where the teal line is below blue, clinical controls shortened that visit’s estimate.
+X-axis = visit order in the file · Y-axis = minutes.
+Where the violet line is below blue, clinical controls shortened that visit’s estimate.
             """
         )
         import matplotlib.pyplot as plt
@@ -940,14 +1033,14 @@ Where the teal line is below blue, clinical controls shortened that visit’s es
             results["pred_wait_model1_min"],
             marker="o",
             label="Model 1 (access only)",
-            color="#5B7C99",
+            color=colors.MODEL_BASELINE,
         )
         ax.plot(
             x,
             results["pred_wait_model2_min"],
             marker="o",
             label="Model 2 (main)",
-            color="#2EC4B6",
+            color=colors.MODEL_MAIN,
         )
         ax.set_xlabel("Visit # in CSV", fontsize=9)
         ax.set_ylabel("Predicted minutes", fontsize=9)
@@ -1046,9 +1139,45 @@ def render_wait_time_tab(artifacts: dict, keep_tab_selected) -> None:
             st.exception(exc)
 
     with st.expander("Model test performance (for reference)"):
+        st.write(
+            "Two Linear Regression models were trained on 329,249 NHAMCS visits from "
+            "2007-2022. Model 1 uses 41 demographic and access features. Model 2 uses 49 "
+            "features by adding triage priority, selected vital signs, and recent ED use. "
+            "The models predict `log(wait_time_min + 1)`, which the app converts back to "
+            "minutes."
+        )
         st.dataframe(
             nhamcs_metrics_table(artifacts["nhamcs_metrics"]),
             hide_index=True,
             width="stretch",
         )
         st.caption("Typical error is ~31 minutes MAE — use as a rough guide, not an exact clock.")
+
+        coefficient_plot = ASSETS_DIR / "nhamcs_equity_coefficients.png"
+        residual_plot = ASSETS_DIR / "nhamcs_model2_residuals.png"
+        plot_columns = st.columns(2, gap="medium")
+        if coefficient_plot.exists():
+            with plot_columns[0]:
+                st.image(
+                    coefficient_plot,
+                    caption=(
+                        "Selected demographic and access coefficients before and after adding "
+                        "clinical controls. Coefficients show associations, not causal effects."
+                    ),
+                    width="stretch",
+                )
+        if residual_plot.exists():
+            with plot_columns[1]:
+                st.image(
+                    residual_plot,
+                    caption=(
+                        "Model 2 residual diagnostics. The remaining spread reinforces that "
+                        "wait time depends on factors outside the available patient variables."
+                    ),
+                    width="stretch",
+                )
+
+        st.info(
+            "Wait-time prediction is approximate and is most useful for understanding "
+            "patterns, limitations, and disparities rather than exact forecasting."
+        )
