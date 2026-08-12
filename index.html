@@ -1,0 +1,281 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="AI4ALL portfolio project studying emergency department wait times and admission risk with machine learning.">
+  <title>Drivers of Emergency Department Wait Times and Admission Risk</title>
+  <link rel="stylesheet" href="style.css">
+  <script src="script.js" defer></script>
+</head>
+<body>
+  <a class="skip-link" href="#main-content">Skip to main content</a>
+
+  <header class="site-header">
+    <a class="brand" href="#top" aria-label="Project home">
+      <img src="streamlit_app/assets/logo.jpeg" alt="Project logo">
+      <span>ED Wait Times &amp; Admission Risk</span>
+    </a>
+    <button class="menu-toggle" type="button" aria-expanded="false" aria-controls="site-nav">Menu</button>
+    <nav id="site-nav" class="site-nav" aria-label="Main navigation">
+      <a href="#overview">Overview</a>
+      <a href="#built">What We Built</a>
+      <a href="#data">Data</a>
+      <a href="#methods">Methods</a>
+      <a href="#results">Results</a>
+      <a href="#app">App</a>
+      <a href="#impact">Impact</a>
+      <a href="#next-steps">Next Steps</a>
+      <a href="#citations">Sources</a>
+    </nav>
+  </header>
+
+  <main id="main-content">
+    <section id="top" class="hero">
+      <div class="hero-content page-width">
+        <div class="hero-main">
+          <p class="eyebrow">Emergency Care · Machine Learning · Equity</p>
+          <h1>Drivers of Emergency Department Wait Times and Admission Risk</h1>
+          <p class="contributors"><strong>Contributors:</strong> Kushagra Aitha, Rupsa Bose, Miskatul Moon</p>
+          <p class="program-line">AI4ALL Ignite Portfolio Project, 2026</p>
+          <p class="hero-summary">We studied disparities in emergency department wait times and built a second workflow that estimates hospital admission risk from information available at triage.</p>
+          <div class="hero-actions">
+            <a class="button button-primary" href="https://17eai4all-zqh26qvaacp8auzs7y4h3i.streamlit.app/" target="_blank" rel="noopener">Open Streamlit App</a>
+            <a class="button button-secondary" href="https://github.com/Kushagra-Aitha/17E_AI4ALL" target="_blank" rel="noopener">View GitHub Repository</a>
+          </div>
+        </div>
+        <dl class="hero-stats" aria-label="Project dataset summary">
+          <div><dt data-count="329249">329,249</dt><dd>NHAMCS visits</dd></div>
+          <div><dt data-count="560484">560,484</dt><dd>Yale triage visits</dd></div>
+          <div><dt data-count="2">2</dt><dd>Connected ED workflows</dd></div>
+        </dl>
+      </div>
+    </section>
+
+    <section id="overview" class="section page-width reveal">
+      <div class="section-heading">
+        <p class="eyebrow">Project overview</p>
+        <h2>Why wait time and admission risk matter</h2>
+      </div>
+      <div class="overview-grid">
+        <div class="overview-copy">
+          <p>Emergency department delays and admission decisions affect access, patient experience, and care planning. Our project uses machine learning to study wait-time disparities and estimate hospital admission risk.</p>
+          <p>The work began as an analysis of whether wait times vary with patient demographics, access factors, and clinical urgency. It later evolved into a combined project with admission-risk screening, connecting what happens before first provider contact with what may happen after triage.</p>
+        </div>
+        <blockquote class="research-question">
+          <span>Our focus</span>
+          How much do clinical urgency, symptoms, and demographic factors help explain emergency department wait times and admission outcomes?
+        </blockquote>
+      </div>
+    </section>
+
+    <section id="built" class="section built-section reveal">
+      <div class="page-width">
+        <div class="section-heading compact-heading">
+          <p class="eyebrow">What we built</p>
+          <h2>Two connected emergency department workflows</h2>
+          <p>Each workflow uses a separate dataset and saved model designed for a different question.</p>
+        </div>
+        <div class="workflow-list">
+          <article class="workflow-card">
+            <span class="workflow-index">01</span>
+            <div>
+              <h3>Wait-Time Analysis and Estimation</h3>
+              <p>Use NHAMCS-trained models to compare approximate wait times and explore how demographic, access, and urgency variables relate to delays.</p>
+            </div>
+          </article>
+          <article class="workflow-card">
+            <span class="workflow-index">02</span>
+            <div>
+              <h3>Batch Admission-Risk Screening</h3>
+              <p>Upload structured triage records and review each visit’s chance of admission, likely outcome, and position in a ranked review table.</p>
+            </div>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <section id="data" class="section page-width reveal">
+      <div class="section-heading">
+        <p class="eyebrow">Data</p>
+        <h2>Separate datasets with separate roles</h2>
+        <p>The NHAMCS and Yale datasets were analyzed independently and were not merged.</p>
+      </div>
+      <div class="two-column-cards">
+        <article class="card data-card">
+          <div class="dataset-heading">
+            <p class="card-label">Wait-time analysis</p>
+            <span>2007–2022</span>
+          </div>
+          <h3>CDC/NCHS NHAMCS</h3>
+          <p>Public-use emergency department data with 329,249 visits in the final modeling set.</p>
+          <dl class="compact-details">
+            <div><dt>Used for</dt><dd>Wait-time analysis and estimation</dd></div>
+            <div><dt>Target</dt><dd>Minutes from arrival to first provider contact</dd></div>
+            <div><dt>Inputs</dt><dd>Demographics, payment and access variables, arrival mode, triage priority, and selected vitals</dd></div>
+          </dl>
+        </article>
+        <article class="card data-card">
+          <div class="dataset-heading">
+            <p class="card-label">Admission prediction</p>
+            <span>560,484 visits</span>
+          </div>
+          <h3>Yale ED Triage Data</h3>
+          <p>The cleaned dataset keeps information available at arrival or initial triage.</p>
+          <dl class="compact-details">
+            <div><dt>Used for</dt><dd>Admission-risk screening</dd></div>
+            <div><dt>Target</dt><dd>Admit versus Discharge</dd></div>
+            <div><dt>Inputs</dt><dd>Demographics, ESI, vitals, arrival details, prior utilization, and chief complaint codes</dd></div>
+          </dl>
+        </article>
+      </div>
+      <p class="definition-note"><strong>ESI</strong>, the Emergency Severity Index, is a triage acuity score used to describe visit urgency.</p>
+    </section>
+
+    <section id="methods" class="section methods-section reveal">
+      <div class="page-width">
+        <div class="section-heading">
+          <p class="eyebrow">Methods and algorithms</p>
+          <h2>Models chosen for clarity and comparison</h2>
+        </div>
+        <div class="methods-grid">
+          <article class="method-panel">
+            <p class="card-label">Yale admission</p>
+            <h3>Logistic Regression</h3>
+            <p>A supervised binary classification model predicts chance of admission and Admit versus Discharge. Balanced class weights help account for fewer admitted visits in the training data.</p>
+            <div class="model-flow"><span>Structured triage inputs</span><b>→</b><span>Admission chance</span></div>
+          </article>
+          <article class="method-panel">
+            <p class="card-label">NHAMCS wait time</p>
+            <h3>Linear Regression and comparison models</h3>
+            <p>Linear Regression is the primary wait-time model because its relationships are easier to interpret. Multinomial Logistic Regression models wait categories, while Random Forest serves as a comparison model.</p>
+            <div class="model-flow"><span>Visit characteristics</span><b>→</b><span>Approximate wait</span></div>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <section id="results" class="section results-section reveal">
+      <div class="page-width">
+        <div class="section-heading light-heading">
+          <p class="eyebrow">Results and model evidence</p>
+          <h2>What the models showed</h2>
+          <p>The models answer different questions, so their metrics should be interpreted separately.</p>
+        </div>
+
+        <article class="result-story">
+          <div class="results-copy">
+            <p class="card-label">Yale admission classifier</p>
+            <h3>Strong separation between admitted and discharged visits</h3>
+            <div class="metric-grid">
+              <div><strong>78.7%</strong><span>Accuracy</span></div>
+              <div><strong>0.875</strong><span>ROC-AUC</span></div>
+              <div><strong>80.1%</strong><span>Recall</span></div>
+              <div><strong>60.8%</strong><span>Precision</span></div>
+            </div>
+            <p>The model identifies about four out of five admitted patients in the held-out test set. Its output supports review; it is not a clinical decision.</p>
+          </div>
+          <figure class="evidence-figure">
+            <img src="streamlit_app/assets/yale_roc_curve.png" alt="ROC curve for the Yale admission model showing an area under the curve of 0.875">
+            <figcaption>Yale admission model ROC curve on the held-out test set.</figcaption>
+          </figure>
+        </article>
+
+        <article class="result-story result-story-reverse">
+          <figure class="evidence-figure">
+            <img src="streamlit_app/assets/nhamcs_equity_coefficients.png" alt="Coefficient chart comparing demographic and access variables in two NHAMCS wait-time models">
+            <figcaption>Selected coefficients help compare demographic and access associations across the NHAMCS models.</figcaption>
+          </figure>
+          <div class="results-copy">
+            <p class="card-label">NHAMCS wait-time models</p>
+            <h3>More useful for associations than exact forecasting</h3>
+            <div class="metric-grid metric-grid-small">
+              <div><strong>0.078</strong><span>Model 2 R²</span></div>
+              <div><strong>31.4 min</strong><span>Model 2 MAE</span></div>
+            </div>
+            <p>A low R² does not make the analysis useless. Wait time depends heavily on hospital operations that NHAMCS does not include, such as staffing, bed availability, queue length, and crowding. The model is therefore more useful for studying associations and disparities than for exact minute-by-minute forecasting.</p>
+          </div>
+        </article>
+      </div>
+    </section>
+
+    <section id="app" class="section page-width reveal">
+      <div class="deployed-app">
+        <p class="eyebrow">Deployed app</p>
+        <h2>How the app works</h2>
+        <p>The deployed app turns the project's saved models into a usable interface. It supports wait-time estimation using NHAMCS-trained models and batch admission-risk screening using structured Yale triage uploads. For the admission workflow, users upload a CSV or Excel file and receive admission chance, likely outcome, and a ranked review table.</p>
+      </div>
+    </section>
+
+    <section id="impact" class="section impact-section reveal">
+      <div class="page-width">
+        <div class="section-heading">
+          <p class="eyebrow">Impact, bias, and limitations</p>
+          <h2>Useful evidence needs responsible boundaries</h2>
+        </div>
+        <div class="impact-grid">
+          <article><h3>Potential value</h3><p>Supports review of ED wait-time patterns, comparison of demographic and clinical drivers, and structured admission-risk screening.</p></article>
+          <article><h3>Main risk</h3><p>Models trained on historical healthcare records can reproduce or amplify disparities if past patterns are treated as neutral.</p></article>
+          <article><h3>Mitigation</h3><p>Subgroup evaluation, calibration, fairness checks, external validation, transparent documentation, and human oversight.</p></article>
+        </div>
+        <div class="limitations">
+          <h3>Important limitations</h3>
+          <ul>
+            <li>NHAMCS does not include live staffing, bed availability, queue length, or crowding.</li>
+            <li>The Yale model needs external validation across hospitals and time periods.</li>
+            <li>Historical healthcare data may reflect existing disparities.</li>
+            <li>All outputs are review support only, not medical decisions.</li>
+          </ul>
+        </div>
+        <aside class="responsible-use"><strong>Research and education only.</strong> These outputs are not medical decisions and should not be used to determine triage priority, delay care, or replace clinician judgment.</aside>
+      </div>
+    </section>
+
+    <section id="next-steps" class="section page-width reveal">
+      <div class="section-heading">
+        <p class="eyebrow">Next steps</p>
+        <h2>How the project could grow</h2>
+      </div>
+      <ol class="next-grid">
+        <li><span>01</span><p>Use richer and more recent emergency department data.</p></li>
+        <li><span>02</span><p>Add staffing, bed availability, queue length, and crowding variables.</p></li>
+        <li><span>03</span><p>Validate performance across hospitals and time periods.</p></li>
+        <li><span>04</span><p>Complete calibration and subgroup fairness evaluations.</p></li>
+        <li><span>05</span><p>Improve app usability with feedback from clinical staff.</p></li>
+      </ol>
+    </section>
+
+    <section id="citations" class="section citations-section reveal">
+      <div class="page-width">
+        <div class="section-heading">
+          <p class="eyebrow">Sources</p>
+          <h2>Citations and data</h2>
+        </div>
+        <div class="source-group">
+          <h3>Research</h3>
+          <ol class="citations">
+            <li>Johnson, T. J., et al. (2022). <a href="https://pubmed.ncbi.nlm.nih.gov/34140453/" target="_blank" rel="noopener">Racial/Ethnic Differences in Pediatric Emergency Department Wait Times</a>. <em>Academic Emergency Medicine</em>.</li>
+            <li>Joseph, J. W., et al. (2023). Race and ethnicity and primary language in emergency department triage. <em>JAMA Network Open</em>.</li>
+            <li>Hong, W. S., Haimovich, A. D., Taylor, R. A., et al. (2018). <a href="https://journals.plos.org/plosone/article?id=10.1371/journal.pone.0201016" target="_blank" rel="noopener">Predicting hospital admission at emergency department triage using machine learning</a>. <em>PLOS ONE</em>.</li>
+            <li>Obermeyer, Z., et al. (2019). <a href="https://www.science.org/doi/10.1126/science.aax2342" target="_blank" rel="noopener">Dissecting racial bias in an algorithm used to manage the health of populations</a>. <em>Science</em>.</li>
+          </ol>
+        </div>
+        <div class="source-group">
+          <h3>Data sources</h3>
+          <ul class="citations data-sources">
+            <li>National Center for Health Statistics. <a href="[https://www.cdc.gov/nchs/nhamcs/about/](https://www.cdc.gov/nchs/nhamcs/about/)" target="_blank" rel="noopener">NHAMCS emergency department public-use data</a>.</li>
+            <li>Yale Emergency Medicine Machine Learning and Clinical Informatics Lab; Hong et al. admission-prediction dataset.</li>
+          </ul>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="site-footer">
+    <div class="page-width footer-inner">
+      <p>AI4ALL Ignite Portfolio Project, 2026</p>
+      <p>Kushagra Aitha · Rupsa Bose · Miskatul Moon</p>
+    </div>
+  </footer>
+</body>
+</html>
