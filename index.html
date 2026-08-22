@@ -159,14 +159,28 @@
       <div class="page-width">
         <div class="section-heading light-heading">
           <p class="eyebrow">Results and model evidence</p>
-          <h2>What the models showed</h2>
+          <h2>Model evidence and key takeaways</h2>
           <p>The models answer different questions, so their metrics should be interpreted separately.</p>
+        </div>
+
+        <div class="results-explainers">
+          <p class="results-reading-note">The two workflows answer different questions. The Yale model is a classification model because it predicts Admit vs Discharge. The NHAMCS model is a wait-time model because it estimates minutes to provider. Their metrics should be interpreted separately.</p>
+          <aside class="metric-guide">
+            <strong>Metric guide</strong>
+            <dl>
+              <div><dt>ROC-AUC</dt><dd>how well the admission model separates admitted and discharged visits.</dd></div>
+              <div><dt>Recall</dt><dd>how many true admissions the model catches.</dd></div>
+              <div><dt>Precision</dt><dd>how often predicted admits are actually admitted.</dd></div>
+              <div><dt>R²</dt><dd>how much wait-time variation the model explains.</dd></div>
+              <div><dt>MAE</dt><dd>average prediction error in minutes.</dd></div>
+            </dl>
+          </aside>
         </div>
 
         <article class="result-story">
           <div class="results-copy">
             <p class="card-label">Yale admission classifier</p>
-            <h3>Strong separation between admitted and discharged visits</h3>
+            <h3>Yale model: strong admission-risk separation</h3>
             <div class="metric-grid">
               <div><strong>78.7%</strong><span>Accuracy</span></div>
               <div><strong>0.875</strong><span>ROC-AUC</span></div>
@@ -174,10 +188,15 @@
               <div><strong>60.8%</strong><span>Precision</span></div>
             </div>
             <p>The model identifies about four out of five admitted patients in the held-out test set. Its output supports review; it is not a clinical decision.</p>
+            <p class="plain-takeaway"><strong>Plain-English takeaway:</strong> the model can rank visits by admission risk much better than random guessing, using information available at triage.</p>
           </div>
           <figure class="evidence-figure">
             <img src="streamlit_app/assets/yale_roc_curve.png" alt="ROC curve for the Yale admission model showing an area under the curve of 0.875">
             <figcaption>Yale admission model ROC curve on the held-out test set.</figcaption>
+            <details class="chart-explainer">
+              <summary>How to read this chart</summary>
+              <p>The diagonal line represents random guessing. A curve that rises above that line shows the model is separating admitted and discharged visits better than chance.</p>
+            </details>
           </figure>
         </article>
 
@@ -185,15 +204,21 @@
           <figure class="evidence-figure">
             <img src="streamlit_app/assets/nhamcs_equity_coefficients.png" alt="Coefficient chart comparing demographic and access variables in two NHAMCS wait-time models">
             <figcaption>Selected coefficients help compare demographic and access associations across the NHAMCS models.</figcaption>
+            <details class="chart-explainer">
+              <summary>How to read this chart</summary>
+              <p>Positive coefficients suggest longer estimated waits. The chart compares demographic and access-related associations before and after adding clinical urgency variables.</p>
+            </details>
           </figure>
           <div class="results-copy">
             <p class="card-label">NHAMCS wait-time models</p>
-            <h3>More useful for associations than exact forecasting</h3>
+            <h3>NHAMCS model: better for pattern analysis than exact wait-time prediction</h3>
             <div class="metric-grid metric-grid-small">
-              <div><strong>0.078</strong><span>Model 2 R²</span></div>
-              <div><strong>31.4 min</strong><span>Model 2 MAE</span></div>
+              <div><strong>0.078</strong><span>Variation explained</span></div>
+              <div><strong>31.4 min</strong><span>Average error</span></div>
             </div>
+            <p class="controlled-note"><strong>Controlled model</strong> = demographic/access variables plus clinical urgency variables.</p>
             <p>A low R² does not make the analysis useless. Wait time depends heavily on hospital operations that NHAMCS does not include, such as staffing, bed availability, queue length, and crowding. The model is therefore more useful for studying associations and disparities than for exact minute-by-minute forecasting.</p>
+            <p class="plain-takeaway"><strong>Plain-English takeaway:</strong> exact wait times are hard to predict without live hospital operations data, but the model is still useful for studying patterns and disparities.</p>
           </div>
         </article>
       </div>
@@ -203,7 +228,8 @@
       <div class="deployed-app">
         <p class="eyebrow">Deployed app</p>
         <h2>How the app works</h2>
-        <p>The deployed app turns the project's saved models into a usable interface. It supports wait-time estimation using NHAMCS-trained models and batch admission-risk screening using structured Yale triage uploads. For the admission workflow, users upload a CSV or Excel file and receive admission chance, likely outcome, and a ranked review table.</p>
+        <p>The deployed app turns the project's saved models into a usable interface. It supports wait-time estimation using NHAMCS-trained models and batch admission-risk screening using structured Yale triage uploads.</p>
+        <p>For each uploaded Yale triage row, the app returns admission chance, likely outcome, a short visit summary, and ranked top and lowest-chance cases.</p>
       </div>
     </section>
 
